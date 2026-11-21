@@ -1053,6 +1053,44 @@ func _creer_passagers(graine: int) -> void:
 		mi.visibility_range_end_margin = 10.0
 		noeud.add_child(mi)
 		_pax_mmi[cle3] = mi
+		_pax_xf[cle3] = liste
+
+
+## Passagers dessinés écartés du skieur (retour d'utilisateur du 21/11/2026, vidéo iPad, dans la rame du Funival :
+## « un bloc obscurcit la vue vers l'aval ») : on entre à pied dans la rame, où les passagers dessinés occupent leurs
+## places ; ceux qui tombaient sur le skieur ou la caméra remplissaient l'écran de grands aplats (blouson, skis,
+## visage vus à 10 cm). Ceux à moins de `r` m (au sol, repère du véhicule) des points `pts` sont repliés ; les
+## autres reprennent leur place. r = 0 : tous à leur place.
+var _pax_xf: Dictionary = {}            # clé → transformées des places (repère du nœud des passagers)
+var _pax_replies: Dictionary = {}       # clé → indices repliés
+const XF_REPLIE: Transform3D = Transform3D(Basis(Vector3(1e-4, 0, 0), Vector3(0, 1e-4, 0), Vector3(0, 0, 1e-4)), Vector3.ZERO)
+
+
+func degager_passagers(pts: Array, r: float) -> void:
+	for cle in _pax_mmi:
+		var mm: MultiMesh = (_pax_mmi[cle] as MultiMeshInstance3D).multimesh
+		var liste: Array = _pax_xf.get(cle, [])
+		var avant: PackedInt32Array = _pax_replies.get(cle, PackedInt32Array())
+		var apres: PackedInt32Array = PackedInt32Array()
+		if r > 0.0:
+			for k in range(mini(mm.visible_instance_count, liste.size())):
+				var o: Vector3 = (liste[k] as Transform3D).origin
+				for q in pts:
+					var ql: Vector3 = q
+					if Vector2(o.x - ql.x, o.z - ql.z).length() < r and absf(o.y - ql.y) < 2.5:
+						apres.append(k)
+						break
+		if apres == avant:
+			continue
+		for k2 in avant:
+			if k2 < liste.size() and not apres.has(k2):
+				mm.set_instance_transform(k2, liste[k2])
+		for k3 in apres:
+			if not avant.has(k3):
+				var x: Transform3D = XF_REPLIE
+				x.origin = (liste[k3] as Transform3D).origin
+				mm.set_instance_transform(k3, x)
+		_pax_replies[cle] = apres
 
 
 ## Passagers dessinés pas encore créés (leurs MultiMesh se font au premier poser_passagers).

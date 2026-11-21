@@ -156,7 +156,7 @@ const FOG_COULEUR: Color = Color(0.55, 0.58, 0.65)
 ## Lumière ambiante la nuit dans une gare ou un véhicule de remontée : chaude, plus basse que celle du jour.
 const AMBIENT_ABRI_NUIT: float = 0.32
 const AMBIANCE_ABRI: Color = Color(0.78, 0.62, 0.44)
-const AMBIANCE_ABRI_WEB: Color = Color(0.52, 0.42, 0.30)
+const AMBIANCE_ABRI_WEB: Color = Color(0.58, 0.44, 0.30)   # (plus chaude, moins grise : 21/11/2026)
 const AMBIANCE_PC: Color = Color(0.45, 0.50, 0.60)
 const AMBIENT_FUNI_SOUS: float = 0.9
 const AMBIANCE_NEONS: Color = Color(0.62, 0.64, 0.66)
@@ -1389,7 +1389,7 @@ func _suite_process(delta: float) -> void:
 			coul = AMBIANCE_NEONS
 		if lieu_lumiere == 1 and ecl > 0.0:
 			# (dans une cabine fermée, la lumière vient de son plafonnier : plus forte ; la PWA n'a que l'ambiante)
-			var a_nuit: float = AMBIENT_ABRI_NUIT * (9.0 if cabine_du_skieur() != null else 2.0) if _compat \
+			var a_nuit: float = AMBIENT_ABRI_NUIT * (9.0 if cabine_du_skieur() != null else 1.3) if _compat \
 				else AMBIENT_ABRI_NUIT * (3.0 if cabine_du_skieur() != null else 1.2)
 			amb = lerpf(amb, a_nuit, ecl)
 			coul = coul.lerp(AMBIANCE_ABRI_WEB if _compat else AMBIANCE_ABRI, ecl)
@@ -3379,6 +3379,9 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 			tete = pc                  # (la caméra est dans la cabine : le plafonnier au-dessus d'elle)
 		if sup2 == null:
 			sup2 = skieur.support if skieur != null and skieur.support != null else sup
+		eclairages_nuit.dans_rame = remontees != null and (remontees.funival_ou(pc, true) != null
+			or (skieur != null and remontees.funival_ou(skieur.global_position + Vector3(0, 1.0, 0), true) != null)) \
+			or (skieur != null and eclairages_nuit.sous_un_toit(skieur.global_position + Vector3(0, 1.0, 0)))
 		eclairages_nuit.regler(ecl if mode_skieur else 0.0, pc, delta, sup2, tete)
 		eclairages_nuit.regler_funival(ecl if mode_skieur else 0.0)
 	var damage: bool = mode_skieur and CycleJour.heure_damage(HeureJeu.heure())
@@ -3502,6 +3505,9 @@ func _lieu_lumiere(dehors: bool) -> int:
 	if camera_souterrain_funival():
 		return 2
 	if cabine_du_skieur() != null:
+		return 1
+	# sous le toit d'une gare ouverte (21/11/2026, gare du 3S la nuit sur iPad : « blafard ») : un abri
+	if dehors and eclairages_nuit != null and eclairages_nuit.sous_un_toit(skieur.global_position + Vector3(0, 1.0, 0)):
 		return 1
 	return 0 if dehors else 1
 

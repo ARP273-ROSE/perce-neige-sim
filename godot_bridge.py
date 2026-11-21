@@ -27,6 +27,7 @@ Usage :
 from __future__ import annotations
 
 import json
+import re
 import os
 import secrets
 import shutil
@@ -36,6 +37,58 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+
+
+def lister_adaptateurs_vulkan(sortie: Optional[str] = None) -> list:
+    """Adaptateurs Vulkan dans l'ordre de l'énumération (celui de
+    ``--gpu-index``) : liste de (rang, type, nom). ``sortie`` : texte de
+    ``vulkaninfo --summary`` (tests) ; sinon lancé s'il est présent
+    (installé avec les pilotes sous Windows, paquet vulkan-tools sous Linux).
+    Liste vide si rien n'est lisible."""
+    if sortie is None:
+        exe = shutil.which("vulkaninfo")
+        if exe is None and os.name == "nt":
+            cand = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "vulkaninfo.exe"
+            exe = str(cand) if cand.is_file() else None
+        if exe is None:
+            return []
+        try:
+            r = subprocess.run([exe, "--summary"], capture_output=True, text=True, timeout=8,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            sortie = r.stdout or ""
+        except (OSError, subprocess.SubprocessError):
+            return []
+    out = []
+    rang = None
+    typ = ""
+    nom = ""
+    for ligne in sortie.splitlines():
+        m = re.match(r"\s*GPU(\d+)\s*:", ligne)
+        if m:
+            if rang is not None:
+                out.append((rang, typ, nom))
+            rang, typ, nom = int(m.group(1)), "", ""
+            continue
+        if rang is None:
+            continue
+        m2 = re.match(r"\s*deviceType\s*=\s*(?:PHYSICAL_DEVICE_TYPE_)?(\w+)", ligne)
+        if m2:
+            typ = m2.group(1)
+        m3 = re.match(r"\s*deviceName\s*=\s*(.+?)\s*$", ligne)
+        if m3:
+            nom = m3.group(1)
+    if rang is not None:
+        out.append((rang, typ, nom))
+    return out
+
+
+def indice_adaptateur(voulu: str, adaptateurs: list) -> Optional[int]:
+    """Rang du premier adaptateur du type voulu (INTEGRATED_GPU, DISCRETE_GPU),
+    jamais un rendu logiciel (CPU) ; None s'il n'y en a pas."""
+    for rang, typ, _nom in adaptateurs:
+        if typ == voulu:
+            return rang
+    return None
 
 class GodotBridge:
     DEFAULT_PORT = 7777
@@ -62,6 +115,11 @@ class GodotBridge:
         # Décor haute définition : auto / oui / non (menu Affichage du sim),
         # lu par la 3D au lancement (PerfManager.decor_hd)
         self.decor_hd = "auto"
+        # Carte graphique (menu Affichage, 21/11/2026) : « auto » = celle que
+        # la 3D choisit (la dédiée d'abord) ; « integree » = le circuit
+        # graphique du processeur (pour un PC dont la carte dédiée plante) ;
+        # « dediee » = la carte dédiée, imposée. Lu au lancement de la 3D.
+        self.carte_gpu = "auto"
         # Repli après un plantage ou un gel de la 3D (posé par le sim) :
         # 0 = réglages choisis, 1 = qualité « low », 2 = « low » en OpenGL
         self.secours = 0
@@ -202,9 +260,29 @@ class GodotBridge:
         return []
 
     def _args_utilisateur(self) -> list:
-        """Arguments du jeu après « -- » : décor HD choisi, puis pack HD."""
+        """Arguments du jeu après « -- » : décor HD choisi, carte graphique, puis pack HD."""
         d = self.decor_hd if self.decor_hd in ("auto", "oui", "non") else "auto"
-        return [f"--decor-hd={d}", *self._args_pack()]
+        carte = ["--carte=integree"] if self.carte_gpu == "integree" else []
+        return [f"--decor-hd={d}", *carte, *self._args_pack()]
+
+    def _args_carte(self) -> list:
+        """Arguments moteur pour la carte graphique choisie (avant « -- »).
+
+        Godot prend d'office la carte dédiée ; ``--gpu-index`` désigne un
+        adaptateur Vulkan par son rang, celui que liste ``vulkaninfo``. Pour
+        « intégrée » sans liste lisible, repli en OpenGL (le pilote choisit,
+        souvent la puce du processeur sur un portable). Jamais de rendu
+        logiciel (llvmpipe) : injouable.
+        """
+        if self.carte_gpu not in ("integree", "dediee"):
+            return []
+        voulu = "INTEGRATED_GPU" if self.carte_gpu == "integree" else "DISCRETE_GPU"
+        idx = indice_adaptateur(voulu, lister_adaptateurs_vulkan())
+        if idx is not None:
+            return ["--gpu-index", str(idx)]
+        if self.carte_gpu == "integree":
+            return ["--rendering-method", "gl_compatibility", "--rendering-driver", "opengl3"]
+        return []
 
     def _args_pack(self) -> list:
         """Argument du pack haute définition, s'il est installé dans le profil."""
@@ -224,6 +302,8 @@ class GodotBridge:
         OpenGL sur une machine sans Vulkan).
         """
         eng = [*self._platform_engine_args(), *(engine_args or [])]
+        if not engine_args:
+            eng += self._args_carte()
         # 1. Binaire bundled exporté
         bundled = self._bundled_binary_path()
         if bundled is not None:

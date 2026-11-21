@@ -497,6 +497,10 @@ QUALITES_3D = ("auto", "high", "medium", "low")
 # Décor haute définition (menu Affichage) : « auto » = la 3D décide selon la
 # machine ; « oui » / « non » = forcé. Lu par la 3D au lancement (--decor-hd).
 DECORS_HD = ("auto", "oui", "non")
+# Carte graphique de la vue 3D (menu Affichage, 21/11/2026) : « auto » = la 3D
+# prend la carte dédiée ; « integree » = le circuit graphique du processeur
+# (PC dont la carte dédiée plante) ; « dediee » = la carte dédiée imposée.
+CARTES_GPU = ("auto", "integree", "dediee")
 # Taille de l'interface peinte (menu Affichage) : facteur sur l'échelle
 # automatique ; « plus grande » reste bornée par ce qui tient à l'écran.
 TAILLES_UI = {"small": 0.85, "normal": 1.0, "large": 1.15, "xlarge": 1.3}
@@ -7797,6 +7801,8 @@ class GameWidget(QWidget):
         self._qualite_3d = q if q in QUALITES_3D else "auto"
         d = _lire_prefs().get("decor_hd", "auto")
         self._decor_hd = d if d in DECORS_HD else "auto"
+        g = _lire_prefs().get("carte_gpu", "auto")
+        self._carte_gpu = g if g in CARTES_GPU else "auto"
         # Heure de jeu (menu Affichage) : réelle, ou date et heure choisies
         h = _lire_prefs().get("heure_jeu", {"mode": "reelle"})
         self._heure_jeu = h if isinstance(h, dict) else {"mode": "reelle"}
@@ -8056,6 +8062,7 @@ class GameWidget(QWidget):
             )
             self._godot_bridge.quality = self._qualite_3d
             self._godot_bridge.decor_hd = self._decor_hd
+            self._godot_bridge.carte_gpu = self._carte_gpu
             # Pack haute définition : servira au prochain lancement du viewer, une
             # fois installé (voir "hd_possible" dans _message_3d).
             self._godot_bridge.donnees = _persistent_data_dir()
@@ -18618,6 +18625,20 @@ class MainWindow(QMainWindow):
             act.setChecked(self.game._decor_hd == d)
             groupe_hd.addAction(act)
             act.triggered.connect(lambda _on=False, d=d: self._choisir_decor_hd(d))
+        sous_g = menu.addMenu(self._tr("Graphics card", "Carte graphique"))
+        groupe_g = QActionGroup(self)
+        groupe_g.setExclusive(True)
+        libelles_g = {
+            "auto": ("Automatic (dedicated card first)", "Automatique (carte dédiée d'abord)"),
+            "integree": ("Integrated (processor graphics)", "Intégrée (circuit graphique du processeur)"),
+            "dediee": ("Dedicated", "Dédiée"),
+        }
+        for g in CARTES_GPU:
+            act = sous_g.addAction(self._tr(*libelles_g[g]))
+            act.setCheckable(True)
+            act.setChecked(getattr(self.game, "_carte_gpu", "auto") == g)
+            groupe_g.addAction(act)
+            act.triggered.connect(lambda _on=False, g=g: self._choisir_carte_gpu(g))
         sous_t = menu.addMenu(self._tr("Interface size", "Taille de l'interface"))
         groupe_t = QActionGroup(self)
         groupe_t.setExclusive(True)
@@ -18736,6 +18757,18 @@ class MainWindow(QMainWindow):
         add_event(self.game.state, "decor_hd",
                   "HD scenery: takes effect the next time the 3D view starts",
                   "Décor HD : pris en compte au prochain lancement de la vue 3D",
+                  "info")
+
+    def _choisir_carte_gpu(self, g: str) -> None:
+        if g not in CARTES_GPU or g == getattr(self.game, "_carte_gpu", "auto"):
+            return
+        self.game._carte_gpu = g
+        _ecrire_prefs({"carte_gpu": g})
+        if self.game._godot_bridge is not None:
+            self.game._godot_bridge.carte_gpu = g     # au prochain lancement
+        add_event(self.game.state, "carte_gpu",
+                  "Graphics card: takes effect the next time the 3D view starts",
+                  "Carte graphique : prise en compte au prochain lancement de la vue 3D",
                   "info")
 
     def _install_help_menu(self) -> None:

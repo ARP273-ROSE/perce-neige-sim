@@ -26,7 +26,24 @@ var relief: ReliefBuilder = null
 var remontees: RemonteesDomaine = null
 var tetes: PackedVector3Array = PackedVector3Array()    # têtes des candélabres (monde)
 var plafonds: PackedVector3Array = PackedVector3Array() # plafonniers des quais (monde)
+## Gares des remontées, sous leur toit : [inverse du repère de la gare, demi-largeur, demi-longueur, bas, haut]
+## (retour d'utilisateur du 21/11/2026, iPad, gare du 3S la nuit : « l'intérieur blafard » — une gare ouverte n'est
+## pas un bâtiment pour le relief, le skieur y était « dehors », sous la lumière grise de la nuit).
+var gares: Array = []
+
+
+## Vrai si `p` (monde) est sous le toit d'une gare de remontée.
+func sous_un_toit(p: Vector3) -> bool:
+	for g in gares:
+		var l: Vector3 = (g[0] as Transform3D) * p
+		if absf(l.x) < float(g[1]) and absf(l.z) < float(g[2]) and l.y > float(g[3]) and l.y < float(g[4]):
+			return true
+	return false
 var _dedans: bool = false
+## Caméra dans une rame du Funival (on y entre à pied : pas de support ni de « à bord ») — retour d'utilisateur du
+## 21/11/2026, vidéo iPad : de nuit, les vitres de la rame, lueur de l'intérieur vue de dehors, couvraient toute la
+## vue de grands aplats gris dans leurs cadres ; de dedans, elles doivent être transparentes comme ailleurs.
+var dans_rame: bool = false
 var _funi_lumieres: Array = []           # lumière intérieure des véhicules du Funival (PC)
 var _mm_mats: MultiMeshInstance3D = null
 var _mm_tetes: MultiMeshInstance3D = null
@@ -79,6 +96,12 @@ func construire(r: ReliefBuilder, rm: RemonteesDomaine) -> void:
 				pieds.append(Vector3(p.x, h, p.z))
 			# plafonniers : au-dessus du quai (milieu de la gare), sous le toit
 			var zq: float = (lg.l_gare * 0.5) if aval else (-L - lg.l_gare * 0.5)
+			var cq: Vector3 = xf * Vector3(0.0, 0.0, zq)
+			var hc: float = relief.hauteur_sol(cq.x, cq.z) if relief != null else cq.y
+			if not (is_inf(hc) or is_nan(hc)):
+				# emprise de la gare (sous le toit) : repère de la ligne, demi-largeur, demi-longueur, bas, haut
+				var xg: Transform3D = Transform3D(xf.basis.orthonormalized(), Vector3(cq.x, hc, cq.z))
+				gares.append([xg.affine_inverse(), lg.voie * 0.5 + 4.5, lg.l_gare * 0.5 + 1.5, -1.5, lg.H_CABLE_GARE + 2.5])
 			for dz in [-0.3, 0.3]:
 				var q: Vector3 = xf * Vector3(0.0, 0.0, zq + dz * lg.l_gare)
 				var hq: float = relief.hauteur_sol(q.x, q.z) if relief != null else q.y
@@ -108,7 +131,11 @@ func construire(r: ReliefBuilder, rm: RemonteesDomaine) -> void:
 	var mm2 := MultiMesh.new()
 	mm2.transform_format = MultiMesh.TRANSFORM_3D
 	mm2.mesh = tete
-	mm2.instance_count = pieds.size()
+	mm2.instance_count = pieds.size() + plafonds.size()
+	# plafonniers des quais : réglettes lumineuses sous le toit (même matière que les têtes des candélabres :
+	# chaudes la nuit, éteintes le jour), étirées en long
+	for k0 in range(plafonds.size()):
+		mm2.set_instance_transform(pieds.size() + k0, Transform3D(Basis.from_scale(Vector3(2.4, 0.5, 0.6)), plafonds[k0]))
 	tetes.resize(pieds.size())
 	for k in range(pieds.size()):
 		var p2: Vector3 = pieds[k]
@@ -133,7 +160,7 @@ func construire(r: ReliefBuilder, rm: RemonteesDomaine) -> void:
 ## Niveau d'éclairage (0..1, CycleJour « eclairage ») et caméra : allume, éteint, place les vraies lumières.
 func regler(n: float, cam_pos: Vector3, dt: float, support: Node3D = null, tete: Vector3 = Vector3.ZERO) -> void:
 	niveau = n
-	var dedans: bool = support != null
+	var dedans: bool = support != null or dans_rame
 	if dedans != _dedans:
 		_dedans = dedans
 		_n_applique = -1.0

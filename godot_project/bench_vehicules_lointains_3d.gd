@@ -19,6 +19,8 @@ var _n_mes: int = 0
 
 func _initialize() -> void:
 	LigneRemontee.noyau_desactive = OS.get_environment("NOYAU") != "1"
+	# chemin de la PWA : véhicules lointains en instances allégées (VehiculesLod), comme à l'export web
+	LigneRemontee.lod_force = LigneRemontee.noyau_desactive
 	_duree = 90.0
 	OccupationRemontees.heure_forcee = 11.0
 	_main = load("res://scenes/main.tscn").instantiate()
@@ -63,6 +65,16 @@ func _tick() -> void:
 		h.append([_t, ss, lg.regime()])
 		if h.size() > 6:
 			h.pop_front()
+		# instances allégées orphelines : une place du tampon dont le véhicule ne pointe pas vers elle reste dessinée,
+		# figée (table place → véhicule jamais écrite, retour d'essai PWA du 21/11/2026, gare aval de Bellevarde)
+		if lg._lod_mm.size() == 2:
+			for k in range(2):
+				for j in range(lg._lod_nb[k]):
+					var iq: int = (lg._lod_qui[k] as PackedInt32Array)[j]
+					if iq < 0 or iq >= lg._lod_slot.size() or lg._lod_slot[iq] != j or lg._lod_niv[iq] != k + 1:
+						_figes[cle + "_orphelin"] = int(_figes.get(cle + "_orphelin", 0)) + 1
+						if int(_figes[cle + "_orphelin"]) == 1:
+							print("ORPHELIN %s niveau %d place %d (véhicule %d)" % [cle, k + 1, j, iq])
 		# figés : 10 s sans bouger alors que la ligne tourne (véhicules dessinés, en ligne)
 		var vus: Dictionary = {}
 		# dessinés : nœud (niveau 0) ou instance allégée (1, 2) ; place logique : _lod_pose

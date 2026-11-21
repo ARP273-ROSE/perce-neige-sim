@@ -1920,7 +1920,14 @@ func _lacher_perche(en_ligne: bool) -> void:
 ## perche, il la lâche et redescend à ski.
 const V_DESCENTE_CORDE: float = 0.9          # m/s, descente contrôlée au descendeur
 var _corde: Dictionary = {}
-var _corde_mi: MeshInstance3D = null
+var _corde_mi: MeshInstance3D = null            # brin libre, de l'évacué au sac à corde au sol
+var _corde_haut_mi: MeshInstance3D = null       # brin porteur, de l'ancrage à l'évacué (incliné quand il balance)
+## Profil du descendeur (secouriste) : la corde est tenue le temps que le mou se tende, puis filée à
+## V_DESCENTE_CORDE ; arrêt court à ~1,2 m du sol (rebond de la corde), puis posé lentement.
+const T_TENU_CORDE: float = 1.2
+const H_ARRET_CORDE: float = 1.2
+const T_ARRET_CORDE: float = 0.7
+const V_POSE_CORDE: float = 0.5
 var _evac_annonce: String = ""
 
 
@@ -1974,7 +1981,20 @@ func _commencer_corde(lg: LigneRemontee) -> void:
 	# descente comptée SOUS le point d'ancrage (retour d'utilisateur du 16/11/2026 : resté à l'altitude de l'arrêt
 	# pendant que le téléphérique continuait à descendre, il lévitait au-dessus) ; la ligne est tenue à l'arrêt
 	var haut0: Vector3 = _ancrage_corde(lg, a_bord[1], v.cabine)
-	_corde = {"lg": lg, "i": a_bord[1], "sous": maxf(haut0.y - p.y, 0.0), "sol": sol, "cap": skieur._cap, "cabine": v.cabine}
+	_corde = {"lg": lg, "i": a_bord[1], "sous": maxf(haut0.y - p.y, 0.0), "sol": sol, "cap": skieur._cap, "cabine": v.cabine,
+		"t": 0.0, "arret": 0.0}
+	# pendule (21/11/2026) : l'évacué glisse du bord avec un peu de vitesse latérale (le véhicule arrêté balance
+	# encore) et une corde légèrement vrillée ; sens tirés du véhicule, mêmes d'une partie à l'autre
+	var pend: PenduleCorde = PenduleCorde.new()
+	var cote: float = 1.0 if int(a_bord[1]) % 2 == 0 else -1.0
+	var lat: Vector3 = Vector3(cos(skieur._cap), 0.0, -sin(skieur._cap)) * (0.45 * cote)
+	pend.lancer(haut0, p, lat + Vector3(0, -0.2, 0), 0.5 * cote, 0.35 * cote)
+	_corde["pendule"] = pend
+	if _corde_haut_mi == null:
+		_corde_haut_mi = MeshInstance3D.new()
+		_corde_haut_mi.name = "CordeEvacuationHaut"
+		_corde_haut_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_corde_haut_mi)
 	lg.corde_en_cours = true
 	if _corde_mi == null:
 		_corde_mi = MeshInstance3D.new()
@@ -1991,6 +2011,7 @@ func _commencer_corde(lg: LigneRemontee) -> void:
 		_corde_mi.mesh = cy
 		_corde_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(_corde_mi)
+		_corde_haut_mi.mesh = cy
 	_corde_mi.visible = true
 	if v.cabine:
 		v.porte_skis(false)
@@ -2004,25 +2025,35 @@ func _descendre_corde(delta: float) -> void:
 		_finir_corde()
 		return
 	var haut: Vector3 = _ancrage_corde(lg, int(_corde["i"]), bool(_corde["cabine"]))
-	var sol: float = relief.hauteur_sol(haut.x, haut.z) if relief != null else float(_corde["sol"])
+	var pend: PenduleCorde = _corde["pendule"]
+	var sol: float = relief.hauteur_sol(pend.p.x, pend.p.z) if relief != null else float(_corde["sol"])
 	_corde["sol"] = sol
-	_corde["sous"] = float(_corde["sous"]) + V_DESCENTE_CORDE * delta
-	var y: float = maxf(haut.y - float(_corde["sous"]), sol)
-	var p: Vector3 = Vector3(haut.x, y, haut.z)
+	var t: float = float(_corde["t"]) + delta
+	_corde["t"] = t
+	# descendeur : tenu, filé, arrêt court près du sol (rebond), posé
+	var h_sol: float = pend.p.y - sol
+	var v_dev: float = V_DESCENTE_CORDE
+	if t < T_TENU_CORDE:
+		v_dev = 0.0
+	elif h_sol < H_ARRET_CORDE:
+		if float(_corde["arret"]) < T_ARRET_CORDE:
+			_corde["arret"] = float(_corde["arret"]) + delta
+			v_dev = 0.0
+		else:
+			v_dev = V_POSE_CORDE
+	pend.vent = LigneRemontee.vent_monde(t + float(int(_corde["i"]) * 17))
+	pend.avancer(delta, haut, v_dev, sol)
+	_corde["sous"] = pend.l0
+	var p: Vector3 = pend.p
 	skieur.global_position = p
 	skieur.velocity = Vector3.ZERO
-	skieur._visuel.basis = Basis(Vector3.UP, float(_corde["cap"]))
-	# corde statique de toute sa longueur, de l'ancrage (siège ou plancher de la cabine) jusqu'au sol où le
-	# secouriste l'a jetée (sac à corde au pied) ; l'évacué y glisse au descendeur (retour d'utilisateur du
-	# 16/11/2026 : « la corde était 10 fois trop courte pour atteindre le sol »)
-	var bas: Vector3 = Vector3(haut.x, sol, haut.z)
-	var l: float = haut.y - bas.y
-	if l > 0.05:
-		_corde_mi.visible = true
-		_corde_mi.global_transform = Transform3D(Basis.IDENTITY.scaled(Vector3(1.0, l, 1.0)), (haut + bas) * 0.5)
-	else:
-		_corde_mi.visible = false
-	if y <= sol + 0.001:
+	skieur._visuel.basis = Basis(Vector3.UP, float(_corde["cap"]) + pend.psi)
+	# brin porteur de l'ancrage (siège ou plancher de la cabine) à l'évacué, incliné quand il balance ; brin libre
+	# jusqu'au sol où le secouriste a jeté le sac à corde (retour d'utilisateur du 16/11/2026 : « la corde était 10
+	# fois trop courte pour atteindre le sol »)
+	_poser_brin(_corde_haut_mi, haut, p + Vector3(0, 0.9, 0))
+	_poser_brin(_corde_mi, p + Vector3(0, 0.9, 0), Vector3(p.x, sol, p.z))
+	if p.y <= sol + 0.001 and t > T_TENU_CORDE:
 		var pied: Vector3 = Vector3(p.x, float(_corde["sol"]) + 0.02, p.z)
 		skieur.embarque = false
 		skieur.lever()
@@ -2037,6 +2068,22 @@ func _descendre_corde(delta: float) -> void:
 		_finir_corde()
 
 
+## Brin de corde droit de `a` à `b` (cylindre d'un mètre étiré et orienté).
+func _poser_brin(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
+	if mi == null:
+		return
+	var d: Vector3 = a - b
+	var l: float = d.length()
+	if l < 0.05:
+		mi.visible = false
+		return
+	var y: Vector3 = d / l
+	var x: Vector3 = y.cross(Vector3.FORWARD if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
+	var z: Vector3 = x.cross(y)
+	mi.visible = true
+	mi.global_transform = Transform3D(Basis(x, y * l, z), (a + b) * 0.5)
+
+
 ## Point d'ancrage de la corde : sous le siège, ou trappe au plancher de la cabine.
 func _ancrage_corde(lg: LigneRemontee, i: int, cabine: bool) -> Vector3:
 	var v: VehiculeRemontee = lg.vehicule(i)
@@ -2049,6 +2096,8 @@ func _finir_corde() -> void:
 	_corde = {}
 	if _corde_mi != null:
 		_corde_mi.visible = false
+	if _corde_haut_mi != null:
+		_corde_haut_mi.visible = false
 
 
 ## Tiré par une perche, en ligne : on peut la lâcher.

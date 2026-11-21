@@ -5,6 +5,48 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.75.5 — 21 novembre 2026 (non publiée)
+
+- **Funival : le « bloc » qui bouchait la vue à bord** (vidéo iPad du 21/11/2026, départ de La Daille : grands
+  aplats gris, marron, roses devant la caméra). C'étaient les **passagers dessinés** de la rame : on y entre à pied
+  et ils occupent leurs places, y compris celle du skieur — un blouson, des skis, un visage vus à 10 cm remplissaient
+  l'écran. Les passagers à moins de 1,1 m de la caméra ou du skieur sont désormais repliés (rames du Funival et
+  cabines des téléphériques, `VehiculeRemontee.degager_passagers`), les autres restent à leur place. Sonde
+  `_sonde_funi_pax` (GDScript seul, OpenGL, format iPad) : 15 passagers écartés par maillage autour du point de vue,
+  la vue vers l'aval dégagée du départ à 43 km/h. De nuit, les vitres de la rame ne luisent plus vues de l'intérieur
+  (la lueur des vitres éclairées ne s'éteignait que dans une cabine où l'on est « à bord », jamais dans le Funival où
+  l'on entre à pied).
+- **Sièges figés au milieu de sièges qui marchent, PWA** (vidéo iPad du 21/11/2026, gare aval de Bellevarde : une
+  pile de sièges immobiles à la sortie de la gare, les sièges en marche passant au travers). Les sièges vus de loin
+  sont des instances allégées tassées au début d'un tampon, avec une table place → véhicule ; écrite
+  `(_lod_qui[k] as PackedInt32Array)[place] = i`, la conversion modifiait une COPIE du tableau compact : la table
+  restait à zéro, et chaque retrait d'un allégé déplaçait les données du dernier dans la place libérée sans prévenir
+  son véhicule — l'instance déplacée restait dessinée, figée. Aussi au PC sans carte dédiée (mode allégé). Sonde
+  `_sonde_bellevarde` : 8 instances figées à 63-133 m du skieur avant, 0 après (chacune à 0,0 m de son siège).
+  `bench_vehicules_lointains` passe maintenant par les niveaux allégés comme la PWA (`LigneRemontee.lod_force`) et
+  vérifie la table : il échoue sur l'ancien code (Grattalu, Tichot, Col des Ves) et passe sur le nouveau.
+- **Intérieurs des gares la nuit, PWA** (photo iPad, gare du 3S : « blafard »). Une gare ouverte n'est pas un
+  bâtiment pour le relief : le skieur y était « dehors », sous la lumière grise de la nuit. Sous le toit d'une gare
+  de remontée (emprise du quai, `EclairagesNuit.sous_un_toit`), c'est un abri : lumière intérieure chaude (plus
+  saturée sur la PWA), vitres de la gare non luisantes vues de dedans, et des réglettes lumineuses aux plafonniers des
+  quais (allumées la nuit, sans vraie lumière).
+- **Descente à la corde : vraie physique** (`PenduleCorde`). L'évacué est une masse de 80 kg au bout d'une corde
+  statique (3 % d'allongement sous son poids, raideur EA/L) qui se dévide au descendeur : balancement dans les deux
+  plans (période 2π√(L/g)), lancé par le départ du siège et entretenu par le vent, amorti par l'air et la corde ;
+  tournoiement sur soi-même (corde vrillée, rappel GJ/L, amorti) ; secouriste qui tient la corde le temps que le mou
+  se tende, file à 0,9 m/s, marque un arrêt à 1,2 m du sol (petit rebond) puis pose. Euler semi-implicite à pas fixe
+  de 1/240 s, en GDScript (la PWA n'a pas le module). Brin porteur incliné de l'ancrage à l'évacué, brin libre jusqu'au
+  sac à corde. Banc `bench_pendule_corde` : période 6,44 s mesurée pour 6,44 s théorique à 30 et 60 i/s, amplitude
+  0,39 → 0,09 m en 60 s, tournoiement ≤ 1,2 rad, balancement ≤ 7° sous le vent, rebond à 1 140 N pour 785 N amorti
+  en 8 s, aucune divergence au pas de 1/15 s (×4) ; `bench_evacuation_corde` repasse (0,78 m/s de moyenne).
+- **Carte bornée au domaine** (demande du 21/11/2026) : on ne la fait plus glisser hors de l'emprise des remontées
+  (plus 600 m de marge), à la souris comme au doigt, et le dézoom s'arrête quand la carte couvre le domaine dans son
+  sens le plus court. Banc `bench_carte_bornee`.
+- **PC : choix de la carte graphique** (menu Affichage → Carte graphique : automatique, intégrée, dédiée), pour un PC
+  dont la carte dédiée plante : « intégrée » lance la 3D sur le circuit graphique du processeur (`--gpu-index` de
+  l'adaptateur intégré lu par `vulkaninfo`, sinon repli OpenGL), et la 3D se règle comme sur une puce intégrée ;
+  jamais de rendu logiciel. Retenu dans les réglages, pris au prochain lancement. Tests `tests/test_carte_gpu.py`.
+
 ## 1.75.4 — 21 novembre 2026
 
 - **Funival, rame : rambarde en travers de la porte ouverte** (retour d'essai PWA du 21/11/2026, gare amont). Deux
