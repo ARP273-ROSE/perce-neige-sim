@@ -5,6 +5,30 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.4 — (non publiée)
+
+- **Mode réseau : l'arrêt d'une remontée par un joueur est vu de tous** (« mon frère a demandé un arrêt que je n'ai
+  pas eu, et du coup on est désynchronisés sur la télécabine de la Daille »). Reproduit avant correction
+  (`bench_reseau_commandes_3d`) : l'hôte venait de toucher au poste et gardait la main une minute, l'arrêt de l'autre
+  n'était exécuté que chez lui et défait 3,4 s plus tard par l'état du pilote ; loin de la Daille (pas construite
+  chez lui), l'hôte la trouvait en marche en y arrivant, et la ligne repartait chez l'autre. Désormais les commandes
+  du poste (démarrer, arrêter, arrêt d'urgence, réarmer, cran) partent à tout le salon (`cmd`, `a` = 2, ordre et
+  cran validés par le relais) et chacun les exécute, pilote ou pas ; l'état publié par le pilote s'applique aussi à
+  une ligne pas encore construite (elle naît arrêtée, sans freiner depuis la pleine vitesse) ; les véhicules sont
+  calés aussi au démarrage et au freinage, et posés d'un coup à la place de ceux du pilote à la première fois après
+  la construction (ligne arrêtée, ou loin de sa place : `LigneRemontee.decaler_phase`).
+- **Deux sur la même perche en réseau : côte à côte** (téléski du Montet : l'autre était dessiné dans le joueur, au
+  milieu de l'archet, « devant moi au lieu d'à côté »). Les perches biplaces ont deux places, de part et d'autre du
+  manche (0,35 m) ; on prend l'autre place si un joueur est déjà sur la perche, et de deux partis ensemble à la même
+  place, celui de plus grand identifiant change de côté. Le véhicule où l'on dessine l'autre est revu à chaque
+  image (choisi une fois pour toutes, il restait faux si les véhicules n'étaient pas encore calés quand il était
+  monté).
+- Vérifié : `bench_reseau_commandes_3d` (A en C++, B en GDScript comme la PWA) — arrêt de B vu par A en 0,4 s, rien
+  ne repart pendant l'arrêt, cabines calées à 0,5 m près 0,4 s après le redémarrage (écart final 0,03 m) ; A arrivé
+  74 s après l'arrêt trouve la Daille arrêtée (40 relevés, 0 en marche), B ne la voit pas repartir ; perche
+  partagée : chacun voit l'autre à sa place à 0,02 m (p95), 0,70 m en travers, sur la même perche. Relais
+  redéployé (même configuration), 426 / 101 / 403 vérifiés.
+
 ## 1.76.3 — 21 novembre 2026
 
 - **Mode réseau sur le PC : on peut taper le code du salon** (« sur l'app PC mon frère ne peut pas taper le code de

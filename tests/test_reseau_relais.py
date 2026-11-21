@@ -76,6 +76,15 @@ def test_lignes():
 def test_cmd_et_pilotes():
     m = S.valider(json.dumps({"t": "cmd", "l": "tph_fornet", "a": 0, "x": "ignoré"}))
     assert m == {"t": "cmd", "l": "tph_fornet", "a": 0}
+    # commande partagée (arrêt fait par un joueur, exécutée par tous)
+    m2 = S.valider(json.dumps({"t": "cmd", "l": "tcd10_daille", "a": 2, "o": "arreter", "k": 3, "tc": 12.5, "z": 1}))
+    assert m2 == {"t": "cmd", "l": "tcd10_daille", "a": 2, "o": "arreter", "k": 3, "tc": 12.5}
+    for mauvais_o in ({"t": "cmd", "l": "tcd10_daille", "a": 2, "o": "panne", "tc": 1.0},
+                      {"t": "cmd", "l": "tcd10_daille", "a": 2, "tc": 1.0},
+                      {"t": "cmd", "l": "tcd10_daille", "a": 2, "o": "cran", "k": 12, "tc": 1.0},
+                      {"t": "cmd", "l": "tcd10_daille", "a": 2, "o": ["arreter"], "tc": 1.0}):
+        with pytest.raises(S.Refus):
+            S.valider(json.dumps(mauvais_o))
     for mauvais in ({"t": "cmd", "l": "tph_fornet", "a": 5}, {"t": "cmd", "l": "../x", "a": 0},
                     {"t": "cmd", "a": 0}):
         with pytest.raises(S.Refus):

@@ -1795,7 +1795,8 @@ func _attendre_perche() -> void:
 			_perche_demandee = false
 			lg.annuler_lancer()
 			_attente_tk = null
-			a_bord = [lg, i, 0, true, false, "perche"]
+			a_bord = [lg, i, _choisir_place_perche(lg, i), true, false, "perche"]
+			_perche_lat = 0.0
 			lg.perche_joueur = i
 			_etat_bord = lg.etat
 			_perche_x = 0.3
@@ -1811,6 +1812,42 @@ func _attendre_perche() -> void:
 
 
 const RECUL_PERCHE: float = 2.2
+## Perche biplace en T (Montet) : un skieur de chaque côté de l'archet, au droit du caoutchouc (0,20 à 0,50 m du
+## manche). Retour d'utilisateur du 21/11/2026 : à deux sur la même perche en réseau, chacun voyait l'autre DANS lui (une
+## seule place, au milieu) — « devant moi au lieu d'à côté ».
+const ECART_PLACE_PERCHE: float = 0.35
+## Mode réseau : place prise sur une perche (ReseauClient.place_perche : l'autre place si un autre joueur est déjà
+## sur cette perche), sinon la première.
+static var choix_place_perche: Callable = Callable()
+var _perche_lat: float = 0.0            # décalage en travers du skieur sur l'archet (m), vers sa place
+
+
+## Décalage en travers (repère du véhicule, x) de la place `k` d'une perche : ±ECART_PLACE_PERCHE aux perches
+## biplaces, 0 aux monoplaces.
+static func x_place_perche(lg: LigneRemontee, k: int) -> float:
+	if lg == null or VehiculeRemontee.DESCRIPTIONS.get(lg.famille, ["", 1, ""])[1] < 2:
+		return 0.0
+	return -ECART_PLACE_PERCHE if k == 0 else ECART_PLACE_PERCHE
+
+
+## Place du joueur sur sa perche (0 hors perche).
+func place_perche() -> int:
+	return int(a_bord[2]) if a_bord.size() >= 6 and String(a_bord[5]) == "perche" else 0
+
+
+## Mode réseau : l'autre joueur a pris la même place sur la même perche (départs simultanés) — l'un des deux change
+## de côté (ReseauClient décide lequel) ; le skieur glisse vers sa nouvelle place.
+func changer_place_perche(k: int) -> void:
+	if a_bord.size() >= 6 and String(a_bord[5]) == "perche":
+		a_bord[2] = clampi(k, 0, 1)
+
+
+func _choisir_place_perche(lg: LigneRemontee, i: int) -> int:
+	if VehiculeRemontee.DESCRIPTIONS.get(lg.famille, ["", 1, ""])[1] < 2:
+		return 0
+	if choix_place_perche.is_valid():
+		return clampi(int(choix_place_perche.call(lg, i)), 0, 1)
+	return 0
 ## Départ à l'enrouleur (audit du 14/11/2026 : le skieur passait de 0 à la vitesse du câble en une
 ## image) : la corde se déroule, son ressort et le frein du tambour l'emmènent en ~2 s (1,6 m/s² au
 ## plus), puis il se tient à RECUL_PERCHE derrière la pince, où le ressort équilibre la pente.
@@ -1856,6 +1893,13 @@ func _suivre_perche() -> void:
 	elif _perche_vs < 0.0:
 		_perche_x = move_toward(_perche_x, recul_c, 1.0 * dt_p)     # établi : la place suit la hauteur du câble
 	var pos: Vector3 = pc + arriere * _perche_x
+	# sa place sur l'archet biplace : de côté, en travers de la ligne
+	var travers: Vector3 = v.global_transform.basis.x
+	travers.y = 0.0
+	travers = travers.normalized()
+	_perche_lat = move_toward(_perche_lat, x_place_perche(lg, int(a_bord[2])), 0.8 * dt_p)
+	var centre: Vector3 = pos
+	pos += travers * _perche_lat
 	var loc: Vector3 = lg.global_transform.affine_inverse() * pos
 	var yl: float = lg.terrain(clampf(-loc.z, 0.0, lg.longueur_h()))
 	var y: float = (lg.global_transform * Vector3(loc.x, yl, loc.z)).y
@@ -1871,7 +1915,9 @@ func _suivre_perche() -> void:
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
 	skieur._cap = cap
 	# archet sous les fesses, rondelle entre les jambes
-	v.tendre_perche(v.to_local(pos + Vector3.UP * (0.62 if lg.famille == "perche_tbar" else 0.72)))
+	# (l'archet reste au milieu des deux places : le manche ne suit pas le skieur sur le côté)
+	centre.y = pos.y
+	v.tendre_perche(v.to_local(centre + Vector3.UP * (0.62 if lg.famille == "perche_tbar" else 0.72)))
 	# en haut, on lâche la perche avant la poulie et l'on s'écarte en
 	# traversée lente, sans élan vers l'avant : lancé à 2 m/s vers l'avant, au
 	# 3000 il passait la crête et dévalait dans le vallon de l'Iseran sans

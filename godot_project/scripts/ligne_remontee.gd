@@ -146,6 +146,7 @@ var pret: bool = false
 var roule: bool = false
 var _t_tranche: int = 0
 signal construite
+var constructions: int = 0             # constructions achevées (mode réseau : véhicules à recaler à chacune)
 
 
 ## Banc de fluidité : durée de la plus longue tranche d'un seul tenant, par
@@ -592,6 +593,7 @@ func _finir_construction() -> void:
 	await _pause("fin : noyau")
 	_percer_fosses()
 	await _pause("fin (portillons, collisions fixes, fosses)")
+	constructions += 1
 	construite.emit()
 
 
@@ -7366,7 +7368,9 @@ func regime() -> float:
 
 func _regler_vitesse(delta: float) -> void:
 	if vitesse_reelle < 0.0:
-		vitesse_reelle = vitesse * CRANS[cran]
+		# (arrêtée avant d'être construite — mode réseau, arrêt d'un autre joueur reçu de loin : elle naît arrêtée au
+		# lieu de freiner depuis la pleine vitesse)
+		vitesse_reelle = vitesse * CRANS[cran] if etat == "marche" else 0.0
 	var cible: float = vitesse * CRANS[cran] * cap_exploitation() if etat == "marche" else 0.0
 	if _jumelee_couplee():
 		cible = minf(cible, vitesse * jumelee._cible_regime())
@@ -7438,6 +7442,20 @@ const ETATS_RESEAU: Array = ["marche", "arret_normal", "arret", "urgence"]
 ## État d'exploitation en code réseau (0 marche, 1 arrêt demandé, 2 arrêt, 3 urgence).
 func etat_reseau_code() -> int:
 	return maxi(ETATS_RESEAU.find(etat), 0)
+
+
+## Mode réseau : décale ses véhicules de `ds` mètres de ligne (au pas de la table de parcours : les véhicules en gare
+## gardent leur file), pour les remettre à la place de ceux du pilote quand la marche du temps ne peut pas le faire
+## (ligne arrêtée, ou qui vient d'être construite). Rien pour les va-et-vient, les tronçons jumelés, les téléskis à
+## magasin.
+func decaler_phase(ds: float) -> void:
+	if _tab_s.size() < 2 or vaetvient() or jumelee != null or not _au_magasin.is_empty() or _vehicules.is_empty():
+		return
+	var dt: float = ds / maxf(vitesse, 0.1)
+	for e in _vehicules:
+		e[1] = _s_de_t(_t_de_s(float(e[1])) + dt)
+	if _noyau != null:
+		_noyau_vehicules(_noyau)
 
 
 ## État et cran reçus du pilote de la ligne : l'arrêt d'urgence et l'arrêt passent par leurs fonctions (onde du

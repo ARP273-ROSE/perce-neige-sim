@@ -26,6 +26,8 @@ RAFALE = 30.0
 NOM_MAX = 16
 LIGNES_MAX = 16                # lignes par message d'état des remontées (1 Ko au plus)
 PILOTES_MAX = 24               # lignes par message des pilotes
+# commandes d'une remontée partagées avec le salon (21/11/2026 : l'arrêt d'un joueur doit être vu de tous)
+ORDRES = ("demarrer", "arreter", "urgence", "rearmer", "cran")
 EXTRA_MAX = 8                  # nombres propres au genre de ligne (va-et-vient, funiculaire)
 BORNE_XZ = 40000.0             # m (le domaine fait ~20 km)
 BORNE_Y = (-500.0, 6000.0)
@@ -139,11 +141,19 @@ def valider(brut: str | bytes) -> dict:
                         _nombre(e[6], 0.0, 1.5), [_nombre(v, -100000.0, 100000.0) for v in x]])
         return {"t": "lignes", "d": out, "tc": _nombre(m.get("tc"), 0.0, 1e11)}
     if t == "cmd":
-        # demande de pilotage d'une remontée (0 : prendre / garder la main, 1 : la rendre) ; l'hôte arbitre
+        # demande de pilotage d'une remontée (0 : prendre / garder la main, 1 : la rendre) ; l'hôte arbitre.
+        # 2 : commande faite au poste (ordre parmi ORDRES, cran 0 à 9), exécutée par chaque joueur
         ligne = m.get("l")
         if not isinstance(ligne, str) or not _RE_LIGNE.match(ligne):
             raise Refus("ligne invalide")
-        return {"t": "cmd", "l": ligne, "a": int(_nombre(m.get("a"), 0, 1))}
+        a = int(_nombre(m.get("a"), 0, 2))
+        if a != 2:
+            return {"t": "cmd", "l": ligne, "a": a}
+        ordre = m.get("o")
+        if not isinstance(ordre, str) or ordre not in ORDRES:
+            raise Refus("ordre invalide")
+        return {"t": "cmd", "l": ligne, "a": 2, "o": ordre, "k": int(_nombre(m.get("k", 0), 0, 9)),
+                "tc": _nombre(m.get("tc"), 0.0, 1e11)}
     if t == "pilotes":
         # pilote de chaque remontée pilotée (décidé par l'hôte) : [[ligne, identifiant du joueur]]
         d = m.get("d")

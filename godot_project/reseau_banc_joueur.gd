@@ -38,6 +38,11 @@ var _transitions: Array = []           # [temps commun, phase]
 var _vrai: Array = []                  # (A) [temps commun, x, y, z] pendant sa descente
 var _vu: Array = []                    # (B) [temps commun, x, y, z] de la corde de A telle que dessinée
 var _quitte: float = -1.0
+# scénarios des commandes (21/11/2026) : « arret_a », « arret_b » (arrêt d'une remontée par B, vu par A), « perche »
+# (A et B sur la même perche d'un téléski biplace : chacun voit l'autre à sa place, côte à côte)
+var _ligne: String = LIGNE
+var _perche: Array = []                # [temps commun, écart au point attendu (m), écart latéral (m), même véhicule]
+var _t_depart: float = -1.0
 
 
 func _initialize() -> void:
@@ -56,6 +61,16 @@ func _initialize() -> void:
 			LigneRemontee.noyau_desactive = true
 	HeureJeu.regler(2026, 2, 15, 12, 0, 1.0, false)
 	RemonteesDomaine.forcees = PackedStringArray(SUIVIES)
+	match _scenario:
+		"arret_a":
+			_ligne = "tcd10_daille"
+		"arret_b":
+			# A loin de la Daille (pas construite chez lui), B à la Daille
+			_ligne = "tcd10_daille" if _role == "B" else "tsd6_grattalu"
+		"perche":
+			_ligne = "tke2_montet"
+	if _scenario in ["arret_a", "arret_b", "perche"]:
+		RemonteesDomaine.forcees = PackedStringArray([_ligne])
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
@@ -98,14 +113,17 @@ func _tick() -> void:
 	if _main.remontees == null or not _main.remontees.pret:
 		return
 	if _lg == null:
-		_lg = _main.remontees._ligne_nommee(LIGNE)
+		_lg = _main.remontees._ligne_nommee(_ligne)
 		_main.aller_a_remontee(_lg)
 		return
 	if not _lg.pret:
 		return
 	var sk: SkieurJoueur = _main.skieur
-	if _scenario != "":
+	if _scenario in ["corde", "coupe"]:
 		_tick_corde(dt, sk)
+		return
+	if _scenario != "":
+		_tick_cmd(dt, sk)
 		return
 	_relever_lignes()
 	match _phase:
@@ -381,3 +399,172 @@ func _tick_corde(dt: float, sk: SkieurJoueur) -> void:
 
 var _t2_fin: float = 0.0
 
+
+
+# --- scénarios des commandes et de la perche partagée (21/11/2026) --------------------------------------------
+
+const DAILLE: String = "tcd10_daille"
+
+
+func _fin_cmd(ok: bool) -> void:
+	_ecrire("%s.json" % _role, JSON.stringify({"ok": ok, "lignes": _lignes, "evts": _evts, "perche": _perche,
+		"id": _rc.mon_id if _rc != null else -1}))
+	print("RESEAU_JOUEUR %s %s fini (%d relevés, %d perche)" % [_role, _scenario, _lignes.size(), _perche.size()])
+	if _rc != null:
+		_rc.quitter()
+	quit(0)
+
+
+## Relevé, au temps commun de la grille (½ s), de l'état de la remontée suivie et de la phase de ses véhicules
+## (abscisse d'un véhicule en ligne modulo l'espacement, ramenée à l'instant de la grille).
+func _relever_cmd(n: String) -> void:
+	if _rc == null or not _rc.connecte:
+		return
+	var k: int = int(_rc.maintenant() * 2.0)
+	if k == _k_prec:
+		return
+	_k_prec = k
+	var lg: LigneRemontee = _main.remontees._ligne_nommee(n)
+	if lg == null:
+		return
+	var ph: float = -1.0
+	if lg.pret and not lg._vehicules.is_empty():
+		var kr: int = ReseauClient._reference(lg)
+		if kr >= 0:
+			var sk_: float = float(lg._vehicules[kr][1]) - lg.vitesse_reelle * (_rc.maintenant() - k * 0.5)
+			ph = fposmod(sk_, lg.espacement)
+	_lignes.append([k, lg.etat, ph, lg.espacement, lg.regime() if lg.pret else -1.0, lg.pret])
+
+
+func _tick_cmd(dt: float, sk: SkieurJoueur) -> void:
+	if _t_total > 800.0:
+		_fin_cmd(false)
+		return
+	match _phase:
+		"charge":
+			_rc = _main.reseau_client()
+			_rc.url = _url
+			_rc.nom = "Banc" + _role
+			if _role == "A":
+				_rc.creer()
+			else:
+				_rc.rejoindre(_code)
+			_phase = "salon"
+		"salon":
+			if not _rc.connecte:
+				return
+			if _role == "A":
+				_ecrire("code.txt", _rc.code)
+				if _rc.pairs.is_empty():
+					return
+			_t += dt
+			# (le temps que B cale ses véhicules sur ceux de l'hôte ; à la perche, on la prend aussitôt arrivés, comme en
+			# vrai — le Montet venait d'être construit chez chacun, ses perches pas encore calées)
+			if _t < (3.0 if _scenario == "perche" else 25.0):
+				return
+			_t = 0.0
+			_phase = "jeu"
+			if _scenario == "perche" and _role == "A":
+				_t_depart = _rc.maintenant() + 4.0
+				_ecrire("depart.txt", str(_t_depart))
+		"jeu":
+			_t += dt
+			match _scenario:
+				"arret_a":
+					_jeu_arret_a()
+				"arret_b":
+					_jeu_arret_b()
+				"perche":
+					_jeu_perche(sk)
+
+
+func _jeu_arret_a() -> void:
+	_relever_cmd(DAILLE)
+	var ex: ExploitationRemontee = _lg.exploitation()
+	if _role == "A" and not _evts.has("geste_A"):
+		# A touche au poste de la Daille (la main lui reste une minute)
+		ex.commande("mode", "manuel")
+		_evts["geste_A"] = _rc.maintenant()
+		print("RESEAU_JOUEUR A geste au poste de la Daille")
+	if _role == "B" and _t > 5.0 and not _evts.has("arret_B"):
+		ex.commande("arreter")
+		_evts["arret_B"] = _rc.maintenant()
+		print("RESEAU_JOUEUR B arrêt de la Daille")
+	if _role == "B" and _t > 35.0 and not _evts.has("depart_B"):
+		var r: String = ex.commande("demarrer")
+		_evts["depart_B"] = _rc.maintenant()
+		print("RESEAU_JOUEUR B départ de la Daille (%s)" % ("fait" if r == "" else r))
+	if _t > 62.0:
+		_fin_cmd(true)
+
+
+func _jeu_arret_b() -> void:
+	_relever_cmd(DAILLE)
+	if _role == "B":
+		if _t > 2.0 and not _evts.has("arret_B"):
+			_lg.exploitation().commande("arreter")
+			_evts["arret_B"] = _rc.maintenant()
+			print("RESEAU_JOUEUR B arrêt de la Daille (A est loin)")
+		if _t > 150.0:
+			_fin_cmd(true)
+		return
+	# A : loin, puis à la Daille plus d'une minute après (la main de B a expiré)
+	if _t > 75.0 and not _evts.has("vers_daille_A"):
+		_evts["vers_daille_A"] = _rc.maintenant()
+		var fo: PackedStringArray = RemonteesDomaine.forcees
+		fo.append(DAILLE)
+		RemonteesDomaine.forcees = fo
+		_lg = _main.remontees._ligne_nommee(DAILLE)
+		_main.aller_a_remontee(_lg)
+		print("RESEAU_JOUEUR A part vers la Daille")
+	if _evts.has("vers_daille_A") and not _evts.has("daille_A") and _lg.pret:
+		_evts["daille_A"] = _rc.maintenant()
+		print("RESEAU_JOUEUR A : Daille construite (%s)" % _lg.etat)
+	if _evts.has("daille_A") and _rc.maintenant() - float(_evts["daille_A"]) > 20.0:
+		_fin_cmd(true)
+	if _t > 400.0:
+		_fin_cmd(false)
+
+
+func _jeu_perche(sk: SkieurJoueur) -> void:
+	var rd: RemonteesDomaine = _main.remontees
+	if _t_depart < 0.0:
+		var pth: String = _sortie.path_join("depart.txt")
+		if FileAccess.file_exists(pth):
+			_t_depart = float(FileAccess.get_file_as_string(pth))
+		return
+	if not _evts.has("au_depart") and _rc.maintenant() >= _t_depart:
+		_evts["au_depart"] = _rc.maintenant()
+		var q: Vector3 = _lg.global_transform * _lg.point_embarquement(true)
+		sk.set_physics_process(true)
+		sk.global_position = q + Vector3.UP * 0.05
+		sk.velocity = Vector3.ZERO
+		print("RESEAU_JOUEUR %s au départ du Montet" % _role)
+		return
+	if rd.a_bord.is_empty():
+		if _evts.has("perche") or _t > 120.0:
+			_fin_cmd(_evts.has("perche"))
+		return
+	if not _evts.has("perche"):
+		_evts["perche"] = _rc.maintenant()
+		_evts["veh"] = int(rd.a_bord[1])
+		print("RESEAU_JOUEUR %s perche %d prise" % [_role, int(rd.a_bord[1])])
+	var tb: float = _rc.maintenant() - float(_evts["perche"])
+	if tb < 8.0:
+		return
+	if tb > 28.0:
+		_fin_cmd(true)
+		return
+	# l'autre, tel que dessiné ici, à sa place sur NOTRE perche : même recul que nous, sa place en travers
+	var v: VehiculeRemontee = _lg.vehicule(int(rd.a_bord[1]))
+	var inv: Transform3D = v.global_transform.affine_inverse()
+	var moi: Vector3 = inv * sk.global_position
+	for id in _rc.pairs:
+		var e: Dictionary = _rc.pairs[id]["rendu"]
+		if e.is_empty():
+			continue
+		var lui: Vector3 = inv * (e["p"] as Vector3)
+		var attendu: Vector3 = Vector3(rd.x_place_perche(_lg, 1 - rd.place_perche()) if rd.has_method("x_place_perche") else moi.x, lui.y, moi.z)
+		var ec: float = Vector2(lui.x - attendu.x, lui.z - attendu.z).length()
+		_perche.append([_rc.maintenant(), ec, lui.x - moi.x, lui.z - moi.z,
+			int(_rc.pairs[id].get("veh", -1)) == int(rd.a_bord[1])])

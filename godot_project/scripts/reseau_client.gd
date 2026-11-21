@@ -38,6 +38,12 @@ const PORTEE_CALAGE: float = 900.0
 const GAIN_CALAGE_S: float = 4.0          # l'écart de phase est rattrapé en ~4 s
 const FACTEUR_MAX: float = 0.25           # marche du temps d'une ligne : 1 ± 25 % au plus
 const RECONNEXIONS_MAX: int = 5
+## Commandes d'une remontée partagées avec tout le salon (retour d'utilisateur du 21/11/2026 : « mon frère a demandé un
+## arrêt que je n'ai pas eu, et du coup on est désynchronisés ») : chacun les exécute chez lui, quel que soit le pilote.
+const ORDRES: Array = ["demarrer", "arreter", "urgence", "rearmer", "cran"]
+## Ligne arrêtée (ou tout juste construite) dont les véhicules ne sont pas à la place de ceux du pilote : décalés d'un
+## coup au premier état reçu (au-delà, la marche du temps s'en charge en roulant).
+const SAUT_CALAGE_M: float = 0.3
 const _RE_LIGNE: String = "^[a-z0-9_]{1,40}$"
 
 var main: Node = null
@@ -68,6 +74,8 @@ var _cal_lignes: Dictionary = {}           # LigneRemontee → instant local du 
 var pilotes: Dictionary = {}               # remontée → identifiant de son pilote (absente : l'hôte)
 var _bail: Dictionary = {}                 # (hôte) remontée → temps commun du dernier geste de son pilote
 var _prise: Dictionary = {}                # remontée → instant local de notre demande de pilotage
+var _ordre_distant: bool = false           # commande d'un autre joueur en cours d'exécution : pas renvoyée
+var _calees: Dictionary = {}               # LigneRemontee → n° de la construction déjà calée une fois
 var _t_vu: float = 0.0
 var _t_pilotes: float = 0.0
 var _t_pn: float = 0.0
@@ -203,9 +211,11 @@ func _fin() -> void:
 			(lg as LigneRemontee).facteur_temps = 1.0
 			(lg as LigneRemontee).cap_reseau = -1.0
 	_cal_lignes.clear()
+	_calees.clear()
 	pilotes.clear()
 	_bail.clear()
 	LigneRemontee.sur_geste = Callable()
+	RemonteesDomaine.choix_place_perche = Callable()
 	if RemonteesDomaine.corde_reseau == self:
 		RemonteesDomaine.corde_reseau = null
 	cordes.clear()
@@ -288,6 +298,7 @@ func _recevoir(txt: String) -> void:
 			_n_horloge = 0
 			_t_horloge = 0.0
 			LigneRemontee.sur_geste = _geste_ligne
+			RemonteesDomaine.choix_place_perche = place_perche
 			RemonteesDomaine.corde_reseau = self
 			_statut("Salon %s — %d joueur(s)" % [code_lisible(code), pairs.size() + 1])
 		"arrivee":
@@ -336,7 +347,9 @@ func _recevoir(txt: String) -> void:
 		"lignes":
 			_caler(d, int(d.get("id", -1)))
 		"cmd":
-			if hote_id == mon_id:
+			if int(d.get("a", 0)) == 2:
+				_executer_ordre(d)
+			elif hote_id == mon_id:
 				if int(d.get("a", 0)) == 0:
 					_arbitrer(String(d.get("l", "")), int(d.get("id", -1)))
 				elif pilotes.get(String(d.get("l", "")), -1) == int(d.get("id", -1)):
@@ -389,6 +402,7 @@ func _envoyer(delta: float) -> void:
 	if _t_vu <= 0.0:
 		_t_vu = 0.1
 		_gestes_locaux()
+		_places_perche()
 	_t_lignes -= delta
 	if _t_lignes <= 0.0:
 		_t_lignes = PERIODE_LIGNES
@@ -536,9 +550,12 @@ func _caler(d: Dictionary, id: int) -> void:
 				calages += 1
 			continue
 		var lg: LigneRemontee = rd.call("_ligne_nommee", n)
-		if lg == null or not lg.pret:
+		if lg == null:
 			continue
+		# (aussi pas encore construite ici : elle naîtra dans l'état du pilote — arrêtée, au même cran)
 		lg.appliquer_etat_reseau(int(e[4]), int(e[5]), float(e[6]))
+		if not lg.pret:
+			continue
 		_cal_lignes[lg] = tl
 		if lg.vaetvient() and lg is Telepherique:
 			(lg as Telepherique).appliquer_reseau(e[7], age)
@@ -554,10 +571,25 @@ func _caler(d: Dictionary, id: int) -> void:
 		var v: float = lg.vitesse_reelle
 		var f: float = 1.0
 		var k: int = _reference(lg)
-		if k >= 0 and float(e[3]) >= 0.98 and lg.regime() >= 0.98 and absf(vh - v) <= 0.05 and absf(v) >= 0.3:
-			var sh: float = float(e[1]) + vh * age
-			var esp: float = lg.espacement
-			var ecart: float = wrapf(sh - float(lg._vehicules[k][1]), -esp * 0.5, esp * 0.5)
+		var esp: float = lg.espacement
+		var sh: float = float(e[1]) + vh * age
+		var ecart: float = wrapf(sh - float(lg._vehicules[k][1]), -esp * 0.5, esp * 0.5) if k >= 0 else 0.0
+		if k >= 0 and absf(v) < 0.05 and absf(vh) < 0.05:
+			# arrêtées toutes deux : la marche du temps n'y peut rien. Première fois depuis sa construction (on arrive
+			# à une ligne arrêtée par un autre) : ses véhicules sont posés d'un coup à la place de ceux du pilote
+			if int(_calees.get(lg, -1)) != lg.constructions and absf(ecart) > SAUT_CALAGE_M:
+				lg.decaler_phase(ecart)
+				calages += 1
+			_calees[lg] = lg.constructions
+		elif k >= 0 and absf(v) >= 0.3 and absf(vh - v) <= maxf(0.05, 0.08 * absf(vh)):
+			# (aussi au démarrage et au freinage, pas seulement à pleine vitesse : après un arrêt les deux repartent
+			# presque ensemble, l'écart est rattrapé dès qu'elles roulent)
+			if int(_calees.get(lg, -1)) != lg.constructions and absf(ecart) > esp * 0.25:
+				# première fois depuis sa construction, loin de la place du pilote : d'un coup plutôt qu'en 10 s (à la
+				# perche prise aussitôt arrivés, l'autre aurait été dessiné sur la perche voisine)
+				lg.decaler_phase(ecart)
+				ecart = 0.0
+			_calees[lg] = lg.constructions
 			f = 1.0 if absf(ecart) < 0.02 else clampf(1.0 + ecart / (v * GAIN_CALAGE_S), 1.0 - FACTEUR_MAX,
 				1.0 + FACTEUR_MAX)
 			calages += 1
@@ -576,9 +608,29 @@ func _caler(d: Dictionary, id: int) -> void:
 # --- pilotage ---------------------------------------------------------------------------------------------
 
 ## Commande du joueur sur une ligne (ExploitationRemontee.commande : poste, pupitre) : on en demande la main.
-func _geste_ligne(lg: LigneRemontee) -> void:
-	if connecte and lg != null and is_instance_valid(lg) and _re.search(String(lg.name)) != null:
-		_demander(String(lg.name))
+func _geste_ligne(lg: LigneRemontee, ordre: String = "", arg: Variant = null) -> void:
+	if _ordre_distant or not connecte or lg == null or not is_instance_valid(lg) or _re.search(String(lg.name)) == null:
+		return
+	_demander(String(lg.name))
+	# la commande elle-même part à tout le salon : chacun l'exécute, pilote ou pas (l'arrêt d'un joueur qui n'a pas
+	# la main n'est plus défait par l'état du pilote, et une ligne pas encore construite chez l'autre naît arrêtée)
+	if ordre in ORDRES and _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		var k: int = clampi(int(arg) if ordre == "cran" and arg != null else lg.cran, 0, 9)
+		_ws.send_text(JSON.stringify({"t": "cmd", "l": String(lg.name), "a": 2, "o": ordre, "k": k, "tc": maintenant()}))
+
+
+## Commande d'une remontée faite par un autre joueur : exécutée ici comme au poste (construite ou pas).
+func _executer_ordre(d: Dictionary) -> void:
+	var o: String = String(d.get("o", ""))
+	var rd: Node = main.get("remontees") if main != null else null
+	if not (o in ORDRES) or rd == null:
+		return
+	var lg: LigneRemontee = rd.call("_ligne_nommee", String(d.get("l", "")))
+	if lg == null or not is_instance_valid(lg):
+		return
+	_ordre_distant = true
+	lg.exploitation().commande(o, int(d.get("k", lg.cran)) if o == "cran" else null)
+	_ordre_distant = false
 
 
 ## Mener le funiculaire (hors mode skieur) : on en demande la main, renouvelée toutes les 10 s.
@@ -729,26 +781,81 @@ func _place_a_bord(id: int, ref: Dictionary, t: float) -> Vector3:
 		return Vector3.INF
 	var cle: String = "%s:%d" % [ref["l"], int(ref["i"])]
 	var pr: Dictionary = pairs[id]
-	if String(pr["choix"]) != cle or int(pr.get("veh", -1)) >= lg._vehicules.size():
-		# notre véhicule le plus proche de son abscisse (calées : le même endroit)
-		var s: float = float(ref["s"]) + lg.vitesse_reelle * lg.regime() * clampf(t - float(ref["tc"]), 0.0, 1.0)
-		var best: int = -1
-		var dmin: float = INF
-		for j in range(lg._vehicules.size()):
-			var dj: float = absf(wrapf(float(lg._vehicules[j][1]) - s, -lg.longueur_boucle * 0.5,
-				lg.longueur_boucle * 0.5))
-			if dj < dmin:
-				dmin = dj
-				best = j
-		if best < 0 or dmin > lg.espacement:
-			return Vector3.INF
+	# notre véhicule le plus proche de son abscisse (calées : le même endroit). Revu à chaque fois : choisi une fois
+	# pour toutes, il restait faux si les véhicules n'étaient pas encore calés quand il est monté (le calage les
+	# déplaçait ensuite sous lui) ; gardé tant qu'il reste assez près (pas de bascule d'un véhicule à l'autre)
+	var s: float = float(ref["s"]) + lg.vitesse_reelle * clampf(t - float(ref["tc"]), 0.0, 1.0)
+	var pv: Array = vehicule_proche(lg, s)
+	var cur: int = int(pr.get("veh", -1)) if String(pr["choix"]) == cle else -1
+	if cur >= 0 and cur < lg._vehicules.size() and absf(wrapf(float(lg._vehicules[cur][1]) - s,
+			-lg.longueur_boucle * 0.5, lg.longueur_boucle * 0.5)) < lg.espacement * 0.35:
+		pass
+	elif int(pv[0]) < 0 or float(pv[1]) > lg.espacement:
+		return Vector3.INF
+	else:
 		pr["choix"] = cle
-		pr["veh"] = best
+		pr["veh"] = int(pv[0])
 	var jv: int = int(pr["veh"])
 	if not lg.vehicule_a_jour(jv):
 		return Vector3.INF
 	var o: Vector3 = Vector3(ref["o"][0], ref["o"][1], ref["o"][2])
 	return lg.vehicule(jv).global_transform * o
+
+
+## Notre véhicule le plus proche de l'abscisse `s` d'une ligne : [indice, distance] ([-1, INF] sans véhicule).
+static func vehicule_proche(lg: LigneRemontee, s: float) -> Array:
+	var best: int = -1
+	var dmin: float = INF
+	for j in range(lg._vehicules.size()):
+		var dj: float = absf(wrapf(float(lg._vehicules[j][1]) - s, -lg.longueur_boucle * 0.5, lg.longueur_boucle * 0.5))
+		if dj < dmin:
+			dmin = dj
+			best = j
+	return [best, dmin]
+
+
+## Pairs sur la perche `i` de la ligne `lg` (dernier état reçu, ramené à notre véhicule) : [[id, place], …], la place
+## d'après son décalage en travers sur l'archet (-1 tant qu'il est encore au milieu).
+func _sur_la_perche(lg: LigneRemontee, i: int) -> Array:
+	var out: Array = []
+	if lg == null or lg.longueur_boucle <= 0.0:
+		return out
+	for id in pairs:
+		var sn: Array = pairs[id]["snaps"]
+		if sn.is_empty():
+			continue
+		var der: Dictionary = sn[sn.size() - 1]
+		if String(der.get("l", "")) != String(lg.name):
+			continue
+		var s: float = float(der["s"]) + lg.vitesse_reelle * clampf(maintenant() - float(der["tc"]), 0.0, 1.0)
+		var pv: Array = vehicule_proche(lg, s)
+		if int(pv[0]) != i or float(pv[1]) > lg.espacement * 0.35:
+			continue
+		var ox: float = float(der["o"][0])
+		out.append([int(id), (1 if ox > 0.0 else 0) if absf(ox) > 0.15 else -1])
+	return out
+
+
+## (RemonteesDomaine.choix_place_perche) Place à prendre sur la perche `i` : l'autre, si un joueur y est déjà.
+func place_perche(lg: LigneRemontee, i: int) -> int:
+	for e in _sur_la_perche(lg, i):
+		if int(e[1]) >= 0:
+			return 1 - int(e[1])
+	return 0
+
+
+## Deux joueurs partis ensemble sur la même perche, à la même place : celui dont l'identifiant est le plus grand
+## change de côté (chacun le sait de son côté, sans échange de plus).
+func _places_perche() -> void:
+	var rd: RemonteesDomaine = main.get("remontees") if main != null else null
+	if rd == null or rd.a_bord.size() < 6 or String(rd.a_bord[5]) != "perche":
+		return
+	var lg: LigneRemontee = rd.a_bord[0]
+	var k: int = rd.place_perche()
+	for e in _sur_la_perche(lg, int(rd.a_bord[1])):
+		if int(e[1]) == k and int(e[0]) < mon_id:
+			rd.changer_place_perche(1 - k)
+			return
 
 
 func _dessiner() -> void:
