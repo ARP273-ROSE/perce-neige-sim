@@ -58,10 +58,34 @@ def test_code_et_jeton():
 
 
 def test_lignes():
-    m = S.valider(json.dumps({"t": "lignes", "tc": 5.0, "d": [["tsd6_bollin", 12.5, 5.0, 1.0]]}))
-    assert m["d"][0][0] == "tsd6_bollin"
+    e = ["tsd6_bollin", 12.5, 5.0, 1.0, 0, 2, 1.0, []]
+    m = S.valider(json.dumps({"t": "lignes", "tc": 5.0, "d": [e]}))
+    assert m["d"][0][0] == "tsd6_bollin" and m["d"][0][4] == 0 and m["d"][0][7] == []
+    # va-et-vient : état complet dans les nombres propres
+    tph = ["tph_grande_motte", 812.3, -9.5, 0.9, 3, 2, 1.0, [812.3, -9.5, -1, 1, 0, 0, 0, 0]]
+    m = S.valider(json.dumps({"t": "lignes", "tc": 5.0, "d": [tph]}))
+    assert m["d"][0][4] == 3 and len(m["d"][0][7]) == 8
     with pytest.raises(S.Refus):
-        S.valider(json.dumps({"t": "lignes", "tc": 5.0, "d": [["x", 1, 1, 1]] * (S.LIGNES_MAX + 1)}))
+        S.valider(json.dumps({"t": "lignes", "tc": 5.0, "d": [e] * (S.LIGNES_MAX + 1)}))
+    for mauvais in (e[:4], e[:7] + [[0] * (S.EXTRA_MAX + 1)], e[:4] + [7] + e[5:], e[:7] + ["x"],
+                    e[:2] + [99.0] + e[3:], ["Bollin;"] + e[1:]):
+        with pytest.raises(S.Refus):
+            S.valider(json.dumps({"t": "lignes", "tc": 5.0, "d": [mauvais]}))
+
+
+def test_cmd_et_pilotes():
+    m = S.valider(json.dumps({"t": "cmd", "l": "tph_fornet", "a": 0, "x": "ignoré"}))
+    assert m == {"t": "cmd", "l": "tph_fornet", "a": 0}
+    for mauvais in ({"t": "cmd", "l": "tph_fornet", "a": 5}, {"t": "cmd", "l": "../x", "a": 0},
+                    {"t": "cmd", "a": 0}):
+        with pytest.raises(S.Refus):
+            S.valider(json.dumps(mauvais))
+    m = S.valider(json.dumps({"t": "pilotes", "d": [["perce_neige", 3], ["tsd6_bollin", 1]]}))
+    assert m["d"] == [["perce_neige", 3], ["tsd6_bollin", 1]]
+    with pytest.raises(S.Refus):
+        S.valider(json.dumps({"t": "pilotes", "d": [["a", 1]] * (S.PILOTES_MAX + 1)}))
+    with pytest.raises(S.Refus):
+        S.valider(json.dumps({"t": "pilotes", "d": [["a", -1]]}))
 
 
 def test_seau():
@@ -162,6 +186,19 @@ def test_echange_reel(monkeypatch):
                 await a.send(_etat())
                 e = json.loads(await recv(b))
                 assert e["t"] == "etat" and e["id"] == b1["id"]
+                # pilotage : la demande d'un joueur va à l'hôte ; seul l'hôte publie les pilotes ; l'état d'une
+                # remontée est relayé de n'importe qui (chacun ne garde que celui du pilote)
+                await b.send(json.dumps({"t": "cmd", "l": "tph_fornet", "a": 0}))
+                c1 = json.loads(await recv(a))
+                assert c1 == {"t": "cmd", "l": "tph_fornet", "a": 0, "id": b2["id"]}
+                await b.send(json.dumps({"t": "pilotes", "d": [["tph_fornet", b2["id"]]]}))      # ignoré
+                await a.send(json.dumps({"t": "pilotes", "d": [["tph_fornet", b2["id"]]]}))
+                p1 = json.loads(await recv(b))
+                assert p1["t"] == "pilotes" and p1["d"] == [["tph_fornet", b2["id"]]]
+                await b.send(json.dumps({"t": "lignes", "tc": 2.0,
+                                         "d": [["tph_fornet", 10.0, 2.0, 1.0, 0, 2, 1.0, [10.0, 2.0, 1, 1]]]}))
+                l1 = json.loads(await recv(a))
+                assert l1["t"] == "lignes" and l1["id"] == b2["id"]
                 await b.send(json.dumps({"t": "horloge", "c": 1.0}))
                 h = json.loads(await recv(b))
                 assert h["t"] == "horloge" and h["s"] > 1e9

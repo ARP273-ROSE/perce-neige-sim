@@ -8,6 +8,11 @@ extends SceneTree
 const LIGNE: String = "tsd6_grattalu"
 const DUREE_SKI: float = 14.0
 const DUREE_ASSIS: float = 45.0
+const DUREE_LIGNES: float = 40.0
+## Remontées comparées entre les deux jeux (« cale tout ») : tenues construites et actives (RemonteesDomaine.forcees).
+const SUIVIES: Array = ["tsd6_grattalu", "tsd6_bollin", "tsd6_fresse", "funival", "tph_grande_motte"]
+const T_URGENCE: float = 8.0           # A (hôte) : arrêt d'urgence de Grattalu, 8 s après le début de « lignes »
+const T_ARRET_B: float = 15.0          # B : arrêt du TPH (il en demande la main), 15 s après la fin du siège de A
 
 var _main: Node = null
 var _f: int = 0
@@ -23,6 +28,9 @@ var _p0: Vector3 = Vector3.ZERO
 var _dir: Vector3 = Vector3.ZERO
 var _notes: Array = []
 var _t_total: float = 0.0
+var _lignes: Array = []                # [clé de temps commun (½ s), {remontée : [...]}]
+var _k_prec: int = -1
+var _evts: Dictionary = {}             # événement → clé de temps commun
 
 
 func _initialize() -> void:
@@ -38,6 +46,7 @@ func _initialize() -> void:
 		elif a == "--sans-noyau":
 			LigneRemontee.noyau_desactive = true
 	HeureJeu.regler(2026, 2, 15, 12, 0, 1.0, false)
+	RemonteesDomaine.forcees = PackedStringArray(SUIVIES)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
@@ -51,8 +60,13 @@ func _ecrire(nom: String, contenu: String) -> void:
 
 
 func _fin(ok: bool) -> void:
+	var pil: Dictionary = {}
+	if _rc != null:
+		for n in SUIVIES:
+			pil[n] = _rc.pilote_de(n)
 	_ecrire("%s.json" % _role, JSON.stringify({"notes": _notes, "calages": _rc.calages if _rc != null else 0,
-		"ok": ok, "decalage": _rc.decalage if _rc != null else 0.0}))
+		"ok": ok, "decalage": _rc.decalage if _rc != null else 0.0, "lignes": _lignes, "evts": _evts,
+		"id": _rc.mon_id if _rc != null else -1, "pilotes": pil}))
 	print("RESEAU_JOUEUR %s fini (%d notes)" % [_role, _notes.size()])
 	if _rc != null:
 		_rc.quitter()
@@ -81,6 +95,7 @@ func _tick() -> void:
 	if not _lg.pret:
 		return
 	var sk: SkieurJoueur = _main.skieur
+	_relever_lignes()
 	match _phase:
 		"charge":
 			_rc = _main.reseau_client()
@@ -141,7 +156,22 @@ func _tick() -> void:
 			var p2: Vector3 = sk.global_position
 			_notes.append([_rc.maintenant(), p2.x, p2.y, p2.z, "assis"])
 			if _t > DUREE_ASSIS or _main.remontees.a_bord.is_empty():
-				_fin(not _main.remontees.a_bord.is_empty())
+				if _main.remontees.a_bord.is_empty():
+					_fin(false)
+					return
+				# rame du funiculaire posée au milieu de la voie : B doit la voir là
+				_main.physics.s = 900.0
+				_main.physics.s_prev_step = 900.0
+				_t = 0.0
+				_phase = "lignes"
+		"lignes":
+			_t += dt
+			if _t > T_URGENCE and not _evts.has("urgence_A"):
+				_main.remontees._ligne_nommee("tsd6_grattalu").exploitation().commande("urgence")
+				_evts["urgence_A"] = int(_rc.maintenant() * 2.0)
+				print("RESEAU_JOUEUR A arrêt d'urgence de Grattalu")
+			if _t > DUREE_LIGNES:
+				_fin(true)
 		"regarde":
 			_t += dt
 			for id in _rc.pairs:
@@ -153,5 +183,36 @@ func _tick() -> void:
 				var bord: bool = bool(e.get("bord", false))
 				_notes.append([_rc.maintenant() - (0.0 if bord else ReseauClient.DELAI_RENDU), p3.x, p3.y, p3.z,
 					int(e["po"]), bord])
-			if _t > DUREE_SKI + DUREE_ASSIS + 30.0 or (_t > 10.0 and _rc.pairs.is_empty()):
+			if _t > DUREE_SKI + DUREE_ASSIS + T_ARRET_B and not _evts.has("arret_B"):
+				var tph: LigneRemontee = _main.remontees._ligne_nommee("tph_grande_motte")
+				if tph != null and tph.pret:
+					tph.exploitation().commande("arreter")
+					_evts["arret_B"] = int(_rc.maintenant() * 2.0)
+					print("RESEAU_JOUEUR B arrêt du TPH (demande de la main)")
+			if _t > DUREE_SKI + DUREE_ASSIS + DUREE_LIGNES + 8.0 or (_t > 10.0 and _rc.pairs.is_empty()):
 				_fin(true)
+
+
+## Relevé, sur une grille de temps commun (½ s), de l'état des remontées suivies chez ce joueur.
+func _relever_lignes() -> void:
+	if _rc == null or not _rc.connecte:
+		return
+	var k: int = int(_rc.maintenant() * 2.0)
+	if k == _k_prec:
+		return
+	_k_prec = k
+	var d: Dictionary = {}
+	for n in SUIVIES:
+		var lg: LigneRemontee = _main.remontees._ligne_nommee(n)
+		if lg == null or not lg.pret or lg._vehicules.is_empty():
+			continue
+		if lg is Telepherique:
+			var t: Telepherique = lg
+			d[n] = [lg.etat, t._s, t._phase, t._sens]
+		else:
+			var kr: int = ReseauClient._reference(lg)
+			if kr < 0:
+				continue
+			d[n] = [lg.etat, fposmod(float(lg._vehicules[kr][1]), lg.espacement), lg.espacement, lg.regime()]
+	d["perce_neige"] = [str(_main.physics.emergency), _main.physics.s, str(_main.physics.doors_open)]
+	_lignes.append([k, d])

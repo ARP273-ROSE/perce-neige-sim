@@ -129,7 +129,11 @@ async def gerer(ws, registre: S.Registre) -> None:
                 await ws.send(json.dumps({"t": "horloge", "c": m["c"], "s": _horloge()}))
             elif t == "etat":
                 _diffuser(salon.autres(ident), S.sortant(m, ident))
-            elif t == "lignes":
+            elif t in ("lignes", "cmd"):
+                # (état des remontées : publié par le pilote de chacune, l'hôte par défaut ; chacun ne retient que
+                # celui du pilote — le relais ne fait que redistribuer)
+                _diffuser(salon.autres(ident), S.sortant(m, ident))
+            elif t == "pilotes":
                 if salon.hote == ident:
                     _diffuser(salon.autres(ident), S.sortant(m, ident))
             elif t == "quitter":
