@@ -51,6 +51,25 @@ static func materiau_pylones() -> StandardMaterial3D:
 	return _materiau_pyl
 
 
+static var _materiau_ouv: StandardMaterial3D = null
+
+
+## Même matériau pour les véhicules ouverts (sièges, perches), séparé : la lueur chaude de la nuit est celle d'une
+## cabine éclairée de l'intérieur ; sur un siège, elle délavait tout en beige pâle une fois la ligne construite
+## (retour d'essai PWA du 21/11/2026 : « blafard de nuit » après la construction, pas pendant — la version cuite
+## montrée pendant la construction n'a pas cette lueur). main._maj_jour : la teinte des pylônes.
+static func materiau_ouverts() -> StandardMaterial3D:
+	if _materiau_ouv == null:
+		_materiau_ouv = materiau().duplicate()
+		_materiau_ouv.resource_name = "vehicules_ouverts_lod"
+	return _materiau_ouv
+
+
+## Véhicule fermé (cabine : éclairée la nuit) d'après la clé « famille|livrée|… ».
+static func ferme(cle: String) -> bool:
+	return cle.begins_with("cabine")
+
+
 ## Maillage du niveau `niveau` ("L1", "L2") pour ce type de véhicule, ou null s'il n'a pas été cuit.
 static func maillage(cle: String, niveau: String, miroir: bool) -> ArrayMesh:
 	if not _lu:
@@ -79,7 +98,7 @@ static func maillage(cle: String, niveau: String, miroir: bool) -> ArrayMesh:
 	ta[Mesh.ARRAY_INDEX] = ix
 	var m: ArrayMesh = ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
-	m.surface_set_material(0, materiau())
+	m.surface_set_material(0, materiau() if ferme(cle) else materiau_ouverts())
 	_maillages[k] = m
 	return m
 
@@ -120,6 +139,7 @@ static func pylone(ligne: String, nom: String) -> ArrayMesh:
 			ta[Mesh.ARRAY_INDEX] = s["i"]
 			var m: ArrayMesh = ArrayMesh.new()
 			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
-			m.surface_set_material(0, materiau())
+			# (pylône : sans la lueur chaude des cabines la nuit)
+			m.surface_set_material(0, materiau_pylones())
 			return m
 	return null

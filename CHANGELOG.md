@@ -5,6 +5,49 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.2 — (non publiée)
+
+- **Descente à la corde en réseau, chacun son tour** (« si on doit descendre à la corde en réseau, c'est chacun son
+  tour, avec les commentaires qui font bien »). Celui qui doit descendre (évacuation de la ligne ou CORDE à la
+  demande) se signale au salon ; l'hôte range les demandes d'une même ligne dont les véhicules sont voisins (60 m, une
+  même équipe de secouristes) en files (`FileCorde` : celui qui descend en tête, puis par ordre de demande, puis
+  d'arrivée au salon) et les publie. On ne part que premier de sa file et personne du groupe en descente ; en
+  attendant, « Évacuation à la corde : X d'abord — à toi dans ~N s ». Un joueur parti ou coupé (muet depuis 4 s) sort
+  de la file, qui passe au suivant. Sans file de l'hôte au bout de 3 s, ordre par identifiant.
+- **La descente de l'autre en direct** : son pendule (ancrage, position, rotation sur soi, longueur de corde) part à
+  10 Hz ; on le voit au bout de sa corde (brin porteur et brin libre jusqu'au sol), interpolé. Pendant la descente,
+  l'état du joueur ne part plus qu'à 2 Hz (le relais coupe au-delà de 20 messages par seconde — c'est ce qui coupait
+  le premier essai) et sans place dans le véhicule (bornée à ±40 m par le relais).
+- **Piques à plusieurs** (`PiquesReseau`, `GuetReseau`, 4 s entre deux piques de corde) : la file se forme (« à vous
+  l'honneur » ou « X passe d'abord »), l'autre descend pendant qu'on attend, il tourne ou balance fort (seuils sur
+  son pendule : 0,5 rad/s, 7°), il touche le sol, c'est notre tour (ou on est le dernier dans le siège), la tête de
+  file traîne (8 s), et au sol la comparaison des descentes (tours sur soi, balancement).
+- **Relais** : messages `corde` (de tous : ligne, abscisse, phase ; en descente ancrage, position, rotation,
+  longueur ≤ 400 m ; au sol tours et balancement) et `file` (de l'hôte seul, 8 joueurs au plus), schéma strict et
+  bornes, essais étendus (`tests/test_reseau_relais.py`).
+- **Caméra pendant la descente à la corde** (« la caméra reste derrière le skieur en 3e personne et solidaire de la
+  tête en 1re ; tout le décor tourne quand on fait la toupie, et on a le vertige si on regarde en bas ») : le corps
+  suspendu est incliné le long de la corde et tourné par sa torsion ; la vue prend le lacet du corps tel quel (le
+  regard du joueur reste relatif) et le balancement (repère incliné le long de la corde, lissé à 12/s, sans
+  tremblement), en 3e comme en 1re personne (yeux inclinés avec le corps) ; au sol, retour en douceur (3/s). Sonde,
+  toupie forcée à 1,8 rad/s : écart de lacet caméra/corps, OpenGL format iPad 3e 0,35° (max 0,94°), 1re 0,51°
+  (max 1,35°) ; Vulkan 3e 0,17° (max 0,48°), 1re 0,10° (max 0,35°) ; regard vers le bas : ses jambes et le sol.
+- **Remontées la nuit, une fois construites** (« quand la remontée se construit c'est pas blafard mais ensuite c'est
+  blafard de nuit »). Pendant la construction, la PWA montre la version cuite (lumière du jour cuite dans la
+  couleur, teinte de nuit de la 1.76.1) ; ensuite, la ligne construite, et deux défauts que la 1.76.1 ne touchait
+  pas, vus côte à côte au format iPad sous OpenGL (Bollin, Bellevarde, Marmottes, 23 h) : les métaux (pylônes
+  galvanisés à 0,75, jantes, pinces) n'avaient plus que le ciel noir à refléter et passaient au noir — ligne
+  monochrome ; les sièges allégés prenaient la lueur chaude des cabines éclairées et viraient au beige pâle, leurs
+  assises bleues comprises. Désormais la part métallique des pièces des remontées baisse avec la nuit (×0,2 en
+  pleine nuit, rendue le jour) et les véhicules ouverts (sièges, perches) et les pylônes allégés ont leur propre
+  matériau, à la teinte des pylônes, sans lueur ; les cabines la gardent. Banc `bench_nuit_construite_3d` :
+  pylône éclairé à 113 % de sa version cuite (43 % avant), assise bleue saturée comme de jour, matériaux des
+  sièges et des cabines, métaux rendus à midi.
+- **Bancs** : `bench_reseau_corde_3d` (relais réel, A avec le module C++ hôte, B en GDScript seul, à bord du même
+  siège de Grattalu arrêté en urgence : A puis B, jamais les deux à la fois ; corde de A vue par B à 0,006 m p95 ;
+  A se déconnecte en pleine descente, B part aussitôt), `bench_piques_reseau` (files, ordre, oubli, piques de corde
+  à plusieurs).
+
 ## 1.76.1 — 21 novembre 2026
 
 - **Piques du mode réseau** (« rajoute des phrases sarcastiques pour le réseau ») : nouvelle banque bilingue

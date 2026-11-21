@@ -31,6 +31,13 @@ var _t_total: float = 0.0
 var _lignes: Array = []                # [clé de temps commun (½ s), {remontée : [...]}]
 var _k_prec: int = -1
 var _evts: Dictionary = {}             # événement → clé de temps commun
+# scénario « corde » (21/11/2026) : évacuation à la corde chacun son tour ; « coupe » : A se déconnecte en descente
+var _scenario: String = ""
+var _ph_corde: String = ""
+var _transitions: Array = []           # [temps commun, phase]
+var _vrai: Array = []                  # (A) [temps commun, x, y, z] pendant sa descente
+var _vu: Array = []                    # (B) [temps commun, x, y, z] de la corde de A telle que dessinée
+var _quitte: float = -1.0
 
 
 func _initialize() -> void:
@@ -43,6 +50,8 @@ func _initialize() -> void:
 			_sortie = a.trim_prefix("--sortie=")
 		elif a.begins_with("--code="):
 			_code = a.trim_prefix("--code=")
+		elif a.begins_with("--scenario="):
+			_scenario = a.trim_prefix("--scenario=")
 		elif a == "--sans-noyau":
 			LigneRemontee.noyau_desactive = true
 	HeureJeu.regler(2026, 2, 15, 12, 0, 1.0, false)
@@ -95,6 +104,9 @@ func _tick() -> void:
 	if not _lg.pret:
 		return
 	var sk: SkieurJoueur = _main.skieur
+	if _scenario != "":
+		_tick_corde(dt, sk)
+		return
 	_relever_lignes()
 	match _phase:
 		"charge":
@@ -216,3 +228,156 @@ func _relever_lignes() -> void:
 			d[n] = [lg.etat, fposmod(float(lg._vehicules[kr][1]), lg.espacement), lg.espacement, lg.regime()]
 	d["perce_neige"] = [str(_main.physics.emergency), _main.physics.s, str(_main.physics.doors_open)]
 	_lignes.append([k, d])
+
+
+# --- scénarios de la corde -----------------------------------------------------------------------------------
+
+func _fin_corde(ok: bool) -> void:
+	_ecrire("%s.json" % _role, JSON.stringify({"ok": ok, "ph": _transitions, "vrai": _vrai, "vu": _vu,
+		"quitte": _quitte, "id": _rc.mon_id if _rc != null else -1}))
+	print("RESEAU_JOUEUR %s corde fini (%d transitions, %d vrai, %d vu)" % [_role, _transitions.size(), _vrai.size(),
+		_vu.size()])
+	if _rc != null and _quitte < 0.0:
+		_rc.quitter()
+	quit(0)
+
+
+func _noter_phase() -> void:
+	var rd: RemonteesDomaine = _main.remontees
+	var ph: String = "bord"
+	if not rd._corde.is_empty():
+		ph = "descente"
+	elif rd._corde_attente != null:
+		ph = "attente"
+	elif rd.a_bord.is_empty() and _ph_corde in ["descente", "sol"]:
+		ph = "sol"
+	if ph != _ph_corde:
+		_ph_corde = ph
+		_transitions.append([_rc.maintenant(), ph])
+		print("RESEAU_JOUEUR %s phase %s" % [_role, ph])
+
+
+func _s_de(i: int) -> float:
+	return fposmod(float(_lg._vehicules[i][1]), _lg.longueur_boucle)
+
+
+func _asseoir(i: int, place: int, sk: SkieurJoueur) -> void:
+	sk.set_physics_process(true)
+	var v: VehiculeRemontee = _lg.vehicule(i)
+	_main.remontees.a_bord = [_lg, i, place, true, false]
+	sk.support = null
+	sk.embarque = true
+	sk.asseoir(_main.remontees._cap(v), true)
+
+
+func _tick_corde(dt: float, sk: SkieurJoueur) -> void:
+	if _t_total > 600.0:
+		_fin_corde(false)
+		return
+	match _phase:
+		"charge":
+			_rc = _main.reseau_client()
+			_rc.url = _url
+			_rc.nom = "Banc" + _role
+			if _role == "A":
+				_rc.creer()
+			else:
+				_rc.rejoindre(_code)
+			_phase = "salon"
+		"salon":
+			if not _rc.connecte:
+				return
+			if _role == "A":
+				_ecrire("code.txt", _rc.code)
+				if _rc.pairs.is_empty():
+					return
+			_t += dt
+			# (le temps que B cale ses sièges sur ceux de l'hôte)
+			if _t < 25.0:
+				return
+			_t = 0.0
+			if _role == "A":
+				_lg.exploitation().commande("urgence")
+				print("RESEAU_JOUEUR A arrêt d'urgence de %s" % LIGNE)
+			_phase = "arret"
+		"arret":
+			_t += dt
+			if _t < 5.0 or _lg.vitesse_reelle > 0.01:
+				return
+			if _role == "A":
+				# le véhicule en ligne le plus haut au-dessus du sol
+				var best: int = -1
+				var hmax: float = -INF
+				for i in range(_lg._vehicules.size()):
+					if _lg.zone_vehicule(i) != "ligne":
+						continue
+					var p: Vector3 = _lg.vehicule(i).global_position
+					var h: float = p.y - _main.relief.hauteur_sol(p.x, p.z)
+					if h > hmax and h < 30.0:
+						hmax = h
+						best = i
+				_asseoir(best, 0, sk)
+				_ecrire("cible.txt", str(_s_de(best)))
+				print("RESEAU_JOUEUR A assis sur %d (s %.1f, %.1f m)" % [best, _s_de(best), hmax])
+				_t = 0.0
+				_phase = "attend_b"
+			else:
+				if not FileAccess.file_exists(_sortie.path_join("cible.txt")):
+					return
+				var cible: float = float(FileAccess.get_file_as_string(_sortie.path_join("cible.txt")))
+				var best2: int = -1
+				var dmin: float = INF
+				for i2 in range(_lg._vehicules.size()):
+					var d: float = absf(wrapf(_s_de(i2) - cible, -_lg.longueur_boucle * 0.5, _lg.longueur_boucle * 0.5))
+					if d < dmin:
+						dmin = d
+						best2 = i2
+				_asseoir(best2, 1, sk)
+				_ecrire("b_assis.txt", "1")
+				print("RESEAU_JOUEUR B assis sur %d (écart %.2f m)" % [best2, dmin])
+				_t = 0.0
+				_phase = "b_attend"
+		"attend_b":
+			_t += dt
+			if not FileAccess.file_exists(_sortie.path_join("b_assis.txt")) or _t < 2.0:
+				return
+			_main.remontees.descendre_corde()
+			_t = 0.0
+			_phase = "evac"
+		"b_attend":
+			_t += dt
+			if _t < 3.5:
+				return
+			_main.remontees.descendre_corde()
+			_t = 0.0
+			_phase = "evac"
+		"evac":
+			_t += dt
+			_noter_phase()
+			var rd: RemonteesDomaine = _main.remontees
+			if _role == "A" and not rd._corde.is_empty():
+				var p2: Vector3 = sk.global_position
+				_vrai.append([_rc.maintenant(), p2.x, p2.y, p2.z])
+				if _scenario == "coupe" and float(rd._corde["t"]) > 4.0 and _quitte < 0.0:
+					_quitte = _rc.maintenant()
+					print("RESEAU_JOUEUR A se déconnecte en pleine descente")
+					_rc.quitter()
+					_fin_corde(true)
+					return
+			if _role == "B":
+				var tr: float = _rc.maintenant() - ReseauClient.DELAI_RENDU
+				for id in _rc.cordes:
+					var cd: Dictionary = _rc.corde_pair(id, tr)
+					if not cd.is_empty():
+						var pc: Vector3 = cd["p"]
+						_vu.append([tr, pc.x, pc.y, pc.z])
+			if _ph_corde == "sol" and _t > 3.0:
+				_t2_fin += dt
+				if _t2_fin > 6.0:
+					_fin_corde(true)
+			if _t > 240.0:
+				_fin_corde(false)
+
+
+var _t2_fin: float = 0.0
+

@@ -15,7 +15,14 @@ const REPIT: Dictionary = {
 	"ARRIVEE": 0.0, "DEPART": 0.0, "COUPURE": 30.0, "RECONNEXION": 30.0, "HOTE_MOI": 60.0, "HOTE_AUTRE": 60.0,
 	"LATENCE": 150.0, "LOIN": 300.0, "FROLE": 40.0, "MEME_VEHICULE": 180.0, "PILOTE": 120.0, "URGENCE": 30.0,
 	"PLUS_RAPIDE": 120.0, "SEUL": 300.0,
+	# descente à la corde à plusieurs (événements ponctuels de ReseauClient, une fois par descente)
+	"CORDE_FILE_PREMIER": 0.0, "CORDE_FILE_APRES": 0.0, "CORDE_AUTRE_DESCEND": 0.0, "CORDE_AUTRE_TOURNE": 0.0,
+	"CORDE_AUTRE_BALANCE": 0.0, "CORDE_AUTRE_SOL": 0.0, "CORDE_MON_TOUR": 0.0, "CORDE_TRAINE": 30.0,
+	"CORDE_DERNIER": 0.0, "CORDE_COMPARE_TOURS_LUI": 0.0, "CORDE_COMPARE_TOURS_MOI": 0.0,
+	"CORDE_COMPARE_BALANCE": 0.0,
 }
+## (une descente dure moins d'une minute : écart plus court entre deux piques de corde)
+const ECART_CORDE_S: float = 4.0
 const LATENCE_S: float = 0.6          # aller-retour au-delà duquel le réseau « rame »
 const LOIN_M: float = 3500.0
 const FROLE_M: float = 2.5
@@ -39,7 +46,7 @@ func signaler(genre: String, t: float, nom: String = "") -> void:
 
 
 func _libre(genre: String, t: float) -> bool:
-	return t - _t_pique >= ECART_S and t - float(_dernier.get(genre, -1e9)) >= float(REPIT.get(genre, 60.0))
+	return t - _t_pique >= (ECART_CORDE_S if genre.begins_with("CORDE_") else ECART_S) and t - float(_dernier.get(genre, -1e9)) >= float(REPIT.get(genre, 60.0))
 
 
 func _sortir(genre: String, t: float, nom: String = "", dist: float = 0.0, vit: float = 0.0) -> Array:
