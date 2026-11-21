@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.76.2 — (non publiée)
+## 1.76.2 — 21 novembre 2026
 
 - **Descente à la corde en réseau, chacun son tour** (« si on doit descendre à la corde en réseau, c'est chacun son
   tour, avec les commentaires qui font bien »). Celui qui doit descendre (évacuation de la ligne ou CORDE à la
