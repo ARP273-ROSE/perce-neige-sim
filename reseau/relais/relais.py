@@ -30,7 +30,7 @@ import salons as S
 CLIENTS_MAX = int(os.environ.get("RESEAU_CLIENTS_MAX", "400"))
 PAR_IP = int(os.environ.get("RESEAU_PAR_IP", "8"))
 DELAI_ENTREE_S = 10.0
-COMPTEURS = {"connexions": 0, "refus": 0, "coupures_debit": 0, "messages": 0, "salons_crees": 0}
+COMPTEURS = {"connexions": 0, "refus": 0, "coupures_debit": 0, "messages": 0, "salons_crees": 0, "listes": 0}
 _par_ip: dict = {}
 _ids = itertools.count(1)
 
@@ -74,9 +74,20 @@ async def gerer(ws, registre: S.Registre) -> None:
     seau = S.Seau()
     try:
         # premier message : créer ou rejoindre, dans le délai
+        # (avant : autant de demandes de la liste des salons ouverts qu'on veut, au débit du seau — le panneau RÉSEAU
+        # la redemande toutes les quelques secondes tant qu'il est ouvert)
         try:
-            brut = await asyncio.wait_for(ws.recv(), DELAI_ENTREE_S)
-            m = S.valider(brut)
+            n_listes = 0
+            while True:
+                brut = await asyncio.wait_for(ws.recv(), DELAI_ENTREE_S)
+                m = S.valider(brut)
+                if m["t"] != "liste":
+                    break
+                n_listes += 1
+                if n_listes > S.LISTES_PAR_CONNEXION or not seau.prendre():
+                    raise S.Refus("trop de listes")
+                COMPTEURS["listes"] += 1
+                await ws.send(json.dumps({"t": "liste", "d": registre.ouverts()}, ensure_ascii=False))
         except (asyncio.TimeoutError, S.Refus):
             COMPTEURS["refus"] += 1
             await ws.close(1008, "entree")

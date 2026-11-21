@@ -20,6 +20,8 @@ var _role: String = "A"
 var _url: String = ""
 var _sortie: String = "/tmp/reseau_banc"
 var _code: String = ""
+var _par_liste: bool = false          # B entre par la liste des salons ouverts, sans code (21/11/2026)
+var _rejoint_par_liste: String = ""   # code du salon pris dans la liste
 var _lg: LigneRemontee = null
 var _rc: ReseauClient = null
 var _phase: String = "charge"
@@ -57,6 +59,8 @@ func _initialize() -> void:
 			_code = a.trim_prefix("--code=")
 		elif a.begins_with("--scenario="):
 			_scenario = a.trim_prefix("--scenario=")
+		elif a == "--par-liste":
+			_par_liste = true
 		elif a == "--sans-noyau":
 			LigneRemontee.noyau_desactive = true
 	HeureJeu.regler(2026, 2, 15, 12, 0, 1.0, false)
@@ -408,7 +412,8 @@ const DAILLE: String = "tcd10_daille"
 
 func _fin_cmd(ok: bool) -> void:
 	_ecrire("%s.json" % _role, JSON.stringify({"ok": ok, "lignes": _lignes, "evts": _evts, "perche": _perche,
-		"id": _rc.mon_id if _rc != null else -1}))
+		"id": _rc.mon_id if _rc != null else -1, "par_liste": _rejoint_par_liste,
+		"code": _rc.code if _rc != null else ""}))
 	print("RESEAU_JOUEUR %s %s fini (%d relevés, %d perche)" % [_role, _scenario, _lignes.size(), _perche.size()])
 	if _rc != null:
 		_rc.quitter()
@@ -447,6 +452,15 @@ func _tick_cmd(dt: float, sk: SkieurJoueur) -> void:
 			_rc.nom = "Banc" + _role
 			if _role == "A":
 				_rc.creer()
+			elif _par_liste:
+				# comme au panneau RÉSEAU : la liste des salons ouverts, puis le bouton du salon de A — rien de tapé
+				_rc.liste_recue.connect(func(salons: Array) -> void:
+					for e in salons:
+						if String(e["hote"]) == "BancA" and _rejoint_par_liste == "":
+							_rejoint_par_liste = String(e["code"])
+							print("RESEAU_JOUEUR B rejoint par la liste : salon de %s (%d joueur)" % [e["hote"], e["n"]])
+							_rc.rejoindre_salon(_rejoint_par_liste))
+				_rc.lister()
 			else:
 				_rc.rejoindre(_code)
 			_phase = "salon"

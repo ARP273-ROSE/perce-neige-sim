@@ -454,6 +454,12 @@ func _dessiner_joy() -> void:
 
 
 func _sur_un_bouton(p: Vector2) -> bool:
+	# panneau en plein écran ouvert (RÉSEAU, heure) : tous ses doigts sont pour lui — un doigt sur la moitié gauche
+	# faisait naître le joystick et le bouton ou le champ dessous ne recevait rien (21/11/2026 : « impossible de rentrer
+	# le code »)
+	for c in get_children():
+		if c is CanvasLayer and (c.name == "PanneauReseau" or c.name == "ReglageHeure"):
+			return true
 	# la carte se glisse au doigt : elle ne doit pas tourner la vue en même temps
 	if carte != null and carte.is_visible_in_tree() and carte.get_global_rect().has_point(p):
 		return true

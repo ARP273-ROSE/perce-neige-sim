@@ -24,6 +24,8 @@ class_name ReseauClient
 extends Node
 
 signal change(texte: String)
+## Salons ouverts reçus du relais : [{code, hote, n}] (rejoindre d'un bouton, sans clavier — 21/11/2026)
+signal liste_recue(salons: Array)
 
 const PERIODE_ETAT: float = 0.1
 const PERIODE_LIGNES: float = 0.5
@@ -38,6 +40,7 @@ const PORTEE_CALAGE: float = 900.0
 const GAIN_CALAGE_S: float = 4.0          # l'écart de phase est rattrapé en ~4 s
 const FACTEUR_MAX: float = 0.25           # marche du temps d'une ligne : 1 ± 25 % au plus
 const RECONNEXIONS_MAX: int = 5
+const PERIODE_LISTE: float = 3.0           # le panneau RÉSEAU ouvert redemande la liste des salons ouverts
 ## Commandes d'une remontée partagées avec tout le salon (retour d'utilisateur du 21/11/2026 : « mon frère a demandé un
 ## arrêt que je n'ai pas eu, et du coup on est désynchronisés ») : chacun les exécute chez lui, quel que soit le pilote.
 const ORDRES: Array = ["demarrer", "arreter", "urgence", "rearmer", "cran"]
@@ -63,6 +66,11 @@ var a_decalage: bool = false
 var calages: int = 0                       # messages de calage appliqués (bancs)
 
 var _ws: WebSocketPeer = null
+var _ws_liste: WebSocketPeer = null        # connexion courte : liste des salons ouverts (avant d'entrer)
+var _t_liste: float = 0.0
+var _liste_voulue: bool = false
+var _t_reliste: float = -1.0
+var salons_ouverts: Array = []
 var _entree: Dictionary = {}
 var _entree_envoyee: bool = false
 var _t_etat: float = 0.0
@@ -172,6 +180,70 @@ func rejoindre(code_saisi: String) -> void:
 	_ouvrir()
 
 
+## Liste des salons ouverts, redemandée toutes les PERIODE_LISTE s jusqu'à arreter_liste() (panneau fermé, salon
+## rejoint) : liste_recue à chaque réponse.
+func lister() -> void:
+	if url == "":
+		_statut("Adresse du relais à régler")
+		return
+	_liste_voulue = true
+	if _ws_liste != null:
+		return
+	_ws_liste = WebSocketPeer.new()
+	_t_liste = 0.0
+	if _ws_liste.connect_to_url(url) != OK:
+		_ws_liste = null
+		_t_reliste = PERIODE_LISTE
+		return
+	set_process(true)
+
+
+func arreter_liste() -> void:
+	_liste_voulue = false
+	if _ws_liste != null:
+		_ws_liste.close(1000, "liste")
+	_ws_liste = null
+	if _ws == null and not _voulu:
+		set_process(false)
+
+
+## Entrer dans un salon de la liste (son code vient du relais : rien à taper).
+func rejoindre_salon(code_liste: String) -> void:
+	arreter_liste()
+	quitter()
+	rejoindre(code_liste)
+
+
+func _poll_liste(delta: float) -> void:
+	if _ws_liste == null:
+		if _liste_voulue and _t_reliste >= 0.0:
+			_t_reliste -= delta
+			if _t_reliste < 0.0:
+				lister()
+		return
+	_ws_liste.poll()
+	var st: int = _ws_liste.get_ready_state()
+	if st == WebSocketPeer.STATE_OPEN:
+		_t_liste -= delta
+		if _t_liste <= 0.0:
+			_t_liste = PERIODE_LISTE
+			_ws_liste.send_text(JSON.stringify({"t": "liste"}))
+		# (un bouton de la liste peut fermer cette connexion pendant liste_recue : on s'arrête là)
+		while _ws_liste != null and _ws_liste.get_available_packet_count() > 0:
+			var d: Variant = JSON.parse_string(_ws_liste.get_packet().get_string_from_utf8())
+			if d is Dictionary and String((d as Dictionary).get("t", "")) == "liste" and (d as Dictionary).get("d") is Array:
+				salons_ouverts = []
+				for e in (d as Dictionary)["d"]:
+					if e is Dictionary and String(e.get("code", "")).length() == 8:
+						salons_ouverts.append({"code": String(e["code"]), "hote": String(e.get("hote", "?")).substr(0, 16),
+							"n": int(e.get("n", 1))})
+				liste_recue.emit(salons_ouverts)
+	elif st == WebSocketPeer.STATE_CLOSED:
+		# (coupée par le relais au bout de 10 s sans demande, ou réseau perdu) : rouverte au tour suivant
+		_ws_liste = null
+		_t_reliste = PERIODE_LISTE
+
+
 func quitter() -> void:
 	_voulu = false
 	if _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
@@ -182,7 +254,7 @@ func quitter() -> void:
 	code = ""
 	jeton = ""
 	_statut("Hors réseau")
-	set_process(false)
+	set_process(_ws_liste != null)
 
 
 func _ouvrir() -> void:
@@ -238,6 +310,7 @@ func _statut(t: String) -> void:
 # --- boucle -----------------------------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	_poll_liste(delta)
 	_guetter(delta)
 	if _ws == null:
 		if _voulu and _t_reconnexion >= 0.0:
@@ -271,7 +344,7 @@ func _process(delta: float) -> void:
 		else:
 			_voulu = false
 			_statut("Déconnecté" + ((" (%s)" % raison) if raison != "" else ""))
-			set_process(false)
+			set_process(_ws_liste != null)
 
 
 func _recevoir(txt: String) -> void:

@@ -91,7 +91,8 @@ func _tick() -> void:
 			var c: String = FileAccess.get_file_as_string(_dos.path_join("code.txt")) \
 				if FileAccess.file_exists(_dos.path_join("code.txt")) else ""
 			if c.length() == 8:
-				_lancer("B", ["--code=" + c, "--sans-noyau"])
+				# (à la perche, B entre par la liste des salons ouverts, sans code : le panneau RÉSEAU sans clavier)
+				_lancer("B", (["--par-liste"] if String(_scen[_k]) == "perche" else ["--code=" + c]) + ["--sans-noyau"])
 				_etape = 2
 		2:
 			var a: Variant = _lire("A.json")
@@ -123,6 +124,10 @@ static func _p95(v: Array) -> float:
 func _comparer_perche(a: Dictionary, b: Dictionary) -> void:
 	var ok: bool = bool(a["ok"]) and bool(b["ok"])
 	var txt: Array = []
+	# B est entré par la liste des salons ouverts, dans le salon de A, sans rien taper
+	var liste_ok: bool = String(b.get("par_liste", "")) != "" and String(b.get("par_liste", "")) == String(a.get("code", "x"))
+	txt.append("B entré par la liste des salons, sans code : %s" % ("oui" if liste_ok else "NON"))
+	ok = ok and liste_ok
 	for r in [[a, "A voit B"], [b, "B voit A"]]:
 		var d: Dictionary = r[0]
 		var ec: Array = []

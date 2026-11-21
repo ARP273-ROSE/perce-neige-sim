@@ -5,6 +5,33 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.5 — (non publiée)
+
+- **Rejoindre un salon sans clavier** (« ça ne marche toujours pas le clavier, ni sous PWA Android, ni iPad, ni
+  Firefox au PC, ni dans l'appli PC : impossible de rentrer le code. Change de méthode, fais un truc simple »). Le
+  panneau RÉSEAU n'a plus besoin de rien taper : un gros bouton CRÉER UN SALON, puis un bouton par salon ouvert
+  (« Rejoindre <hôte> (n joueurs) »), liste redemandée au relais toutes les 3 s tant que le panneau est ouvert. La
+  couleur se choisit aux boutons, le nom est facultatif (« Skieur »). Le code reste affiché et peut encore être tapé,
+  en secours.
+- Relais : nouvelle demande `liste`, permise seulement avant d'entrer dans un salon (au débit du seau, 400 par
+  connexion au plus). Elle rend au plus 20 salons non vides et non pleins, les plus récents d'abord, avec seulement
+  le code, le nom choisi par l'hôte et le nombre de joueurs. N'importe qui ayant le jeu voit donc les salons ouverts
+  et peut y entrer (8 joueurs au plus par salon, comme avant). Les clients 1.76.4 entrent toujours au code. Relais
+  redéployé avec les mêmes options.
+- Sur tablette, un doigt posé sur un panneau plein écran (RÉSEAU, heure) ne fait plus naître le joystick : sur la
+  moitié gauche de l'écran, le bouton ou le champ dessous ne recevait rien.
+- Pourquoi le clavier ne marchait pas : sur iPad et Android, l'export web n'ouvre pas le clavier à l'écran
+  (`html/experimental_virtual_keyboard` désactivé) ; dans le jeu Godot natif, avec souris et clavier, la saisie
+  marche (sonde en rendu réel) ; sous Firefox au PC, pas reproduit ici.
+- Vérifié :
+  - `test_reseau_relais.py` : liste, ordre, salons pleins ou vides absents, entrée depuis la liste sur la même
+    connexion, liste refusée une fois dans un salon ;
+  - `bench_reseau_commandes_3d` : B, en GDScript seul comme la PWA, entre dans le salon de A par la liste, sans
+    code ;
+  - sonde en rendu réel (Vulkan 1400×900, OpenGL au format iPad) : bouton du salon touché au doigt sur la moitié
+    gauche de l'écran, salon rejoint, FERMER au clic ;
+  - relais public : liste, entrée par la liste, entrée au code d'un ancien client.
+
 ## 1.76.4 — 21 novembre 2026
 
 - **Mode réseau : l'arrêt d'une remontée par un joueur est vu de tous** (« mon frère a demandé un arrêt que je n'ai

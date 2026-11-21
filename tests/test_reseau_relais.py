@@ -149,6 +149,30 @@ def test_salons_plein_et_expiration():
         r.creer()
 
 
+def test_liste_des_salons():
+    # rejoindre sans clavier (21/11/2026) : la liste ne donne que code, nom de l'hôte, nombre de joueurs
+    assert S.valider(json.dumps({"t": "liste", "x": "ignoré"})) == {"t": "liste"}
+    t = [0.0]
+    r = S.Registre(b"k" * 32, horloge=lambda: t[0])
+    vide = r.creer()
+    a = r.creer()
+    a.entrer(1, "Kev", [1, 0, 0], None, hote=True)
+    t[0] += 1.0
+    b = r.creer()
+    b.entrer(2, "Frere", [0, 0, 1], None, hote=True)
+    b.entrer(3, "Autre", [0, 1, 0], None)
+    t[0] += 1.0
+    plein = r.creer()
+    for i in range(S.JOUEURS_MAX):
+        plein.entrer(10 + i, "p", [0, 0, 0], None, hote=(i == 0))
+    li = r.ouverts()
+    assert li == [{"code": b.code, "hote": "Frere", "n": 2}, {"code": a.code, "hote": "Kev", "n": 1}]
+    assert vide.code not in [e["code"] for e in li] and plein.code not in [e["code"] for e in li]
+    for _ in range(S.LISTE_MAX + 5):
+        r.creer().entrer(99, "x", [0, 0, 0], None, hote=True)
+    assert len(r.ouverts()) == S.LISTE_MAX
+
+
 def _module(nom):
     """Module du relais chargé par son chemin, sous un nom propre (aucun conflit avec d'autres tests)."""
     import importlib.util
@@ -241,6 +265,26 @@ def test_echange_reel(monkeypatch):
             finally:
                 await a.close()
                 await b.close()
+            # liste des salons ouverts, puis entrée d'un bouton (sans code tapé) sur la même connexion
+            h1 = await ouvrir(url)
+            g = await ouvrir(url)
+            try:
+                await h1.send(json.dumps({"t": "creer", "nom": "Hote"}))
+                bh = json.loads(await recv(h1))
+                await g.send(json.dumps({"t": "liste"}))
+                li = json.loads(await recv(g))
+                assert li["t"] == "liste" and {"code": bh["code"], "hote": "Hote", "n": 1} in li["d"]
+                await g.send(json.dumps({"t": "liste"}))
+                assert json.loads(await recv(g))["t"] == "liste"
+                await g.send(json.dumps({"t": "rejoindre", "code": li["d"][0]["code"], "nom": "Invite"}))
+                bg = json.loads(await recv(g))
+                assert bg["t"] == "bienvenue" and bg["code"] == bh["code"] and len(bg["membres"]) == 2
+                # une fois dans un salon, plus de liste : coupé
+                await g.send(json.dumps({"t": "liste"}))
+                assert await coupe(g)
+            finally:
+                await h1.close()
+                await g.close()
             # mauvais code : refusé
             c = await ouvrir(url)
             try:

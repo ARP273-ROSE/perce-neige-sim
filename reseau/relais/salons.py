@@ -28,6 +28,8 @@ LIGNES_MAX = 16                # lignes par message d'état des remontées (1 Ko
 PILOTES_MAX = 24               # lignes par message des pilotes
 # commandes d'une remontée partagées avec le salon (21/11/2026 : l'arrêt d'un joueur doit être vu de tous)
 ORDRES = ("demarrer", "arreter", "urgence", "rearmer", "cran")
+LISTE_MAX = 20                 # salons ouverts donnés à qui demande la liste (rejoindre sans clavier, 21/11/2026)
+LISTES_PAR_CONNEXION = 400     # demandes de liste avant d'entrer dans un salon (une toutes les 3 s : 20 min)
 EXTRA_MAX = 8                  # nombres propres au genre de ligne (va-et-vient, funiculaire)
 BORNE_XZ = 40000.0             # m (le domaine fait ~20 km)
 BORNE_Y = (-500.0, 6000.0)
@@ -212,6 +214,10 @@ def valider(brut: str | bytes) -> dict:
         return o
     if t == "quitter":
         return {"t": "quitter"}
+    if t == "liste":
+        # salons ouverts (avant d'entrer) : rejoindre d'un bouton, sans taper de code (retour d'utilisateur du
+        # 21/11/2026 : « impossible de rentrer le code, fais un truc simple »)
+        return {"t": "liste"}
     raise Refus("type inconnu")
 
 
@@ -241,6 +247,7 @@ class Salon:
         self.membres: dict = {}        # id → {"nom", "c", "envoi"}
         self.ordre: list = []          # ids par ordre d'arrivée (le premier est l'hôte)
         self.h = horloge
+        self.cree = horloge()
         self.vide_depuis: float | None = horloge()
 
     @property
@@ -297,6 +304,15 @@ class Registre:
         if s is None:
             raise Refus("salon inconnu")
         return s
+
+    def ouverts(self) -> list:
+        """Salons où l'on peut entrer (au moins un joueur, pas pleins), les plus récents d'abord : code, nom de
+        l'hôte, nombre de joueurs — rien d'autre."""
+        self.purger()
+        out = [s for s in self.salons.values() if s.membres and len(s.membres) < JOUEURS_MAX]
+        out.sort(key=lambda s: s.cree, reverse=True)
+        return [{"code": s.code, "hote": s.membres[s.hote]["nom"] if s.hote in s.membres else "?",
+                 "n": len(s.membres)} for s in out[:LISTE_MAX]]
 
     def purger(self) -> int:
         now = self.h()
