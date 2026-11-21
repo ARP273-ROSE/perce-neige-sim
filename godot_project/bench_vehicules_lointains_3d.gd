@@ -97,7 +97,7 @@ func _tick() -> void:
 				if lg.etat == "marche" and absf(float((h[0][1] as PackedFloat64Array)[i]) - ss[i]) < 0.01:
 					_figes[cle] = int(_figes.get(cle, 0)) + 1
 					if int(_figes[cle]) == 1:
-						print("FIGE %s véhicule %d niveau %d, ligne traitée %s, régime %.2f" % [cle, i, lg._lod_niv[i] if i < lg._lod_niv.size() else -1, lg.is_processing(), lg.regime()])
+						print("FIGE %s véhicule %d niveau %d, ligne traitée %s, régime %.2f, au repos %s, cachés loin %d, noyau %s, t %.0f s" % [cle, i, lg._lod_niv[i] if i < lg._lod_niv.size() else -1, lg.is_processing(), lg.regime(), str(lg.get_meta("au_repos", "?")), Array(lg._caches_loin).count(1), lg._noyau != null, _t])
 		for a in range(dess.size()):
 			for b2 in range(a + 1, dess.size()):
 				if (dess[a][0] as Vector3).distance_to(dess[b2][0]) < 2.0:

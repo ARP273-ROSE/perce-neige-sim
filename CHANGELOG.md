@@ -29,8 +29,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 - **Relevé de fluidité : état du décor** — relief fin et son pas (5 m, 2,5 m, 1 m), pack HD (niveau), repli du
   relief fin en cours, échelle du rendu 3D (FSR). « Mon relief est-il au détail max ? » a maintenant sa réponse dans
   le relevé.
-- Connu, non traité : avec le module C++, `bench_vehicules_lointains` voit encore des sièges figés sur des lignes au
-  repos (Merles, Bollin ; déjà sur la 1.75.3) — le banc de la suite tourne en GDScript.
+- **Sièges figés au loin avec le module C++ (PC)** : sur une ligne mise au repos, les nœuds visibles au moment du
+  repos — et ceux que `set_lointains` remontrait après, ou la fin de construction — restaient dessinés, figés (les
+  60 sièges de Bollin, une partie sur deux). Le repos cache maintenant les véhicules dans les deux chemins, un tronçon
+  jumelé qui attend son jumeau aussi, et les lignes au repos sont repassées une à la fois toutes les 2 s. Nouveau
+  banc `bench_vehicules_lointains_noyau` (même banc, avec le module) ; les deux passent.
+- **Chariot du 3S articulé** (retour d'essai du 20/11/2026 : « le chariot du 3S s'articule longitudinalement pour
+  que les galets roulent dans le support courbe du demi-tour de la gare ») : deux demi-chariots, avant et arrière,
+  portent chacun les balanciers de leur bout ; en gare, chacun suit le rail à sa place et dans sa tangente, le corps
+  et la pince restent au milieu. Écart galet ↔ rail dans le demi-tour : 14,3 cm avec le chariot rigide, 2,2 cm
+  maintenant (sonde `_sonde_3s_rail`, 2 282 mesures).
+- **Câbles en ligne immobiles** (retour d'essai PC 1.75.3 : « oscillation de 1 Hz d'environ 10 cm de tous les câbles
+  en ligne ») : mesuré sur la 1.75.4, rien ne bouge — câble dessiné filmé d'une caméra fixe en milieu de portée
+  (TCD, TSD, TSF, avec et sans module) : 0,5 mm crête à crête, rien vers 1 Hz ; vu d'un siège à bord, câble 20 et
+  60 m devant : ≤ 2 cm, balancement du siège à 0,3 Hz seulement. Nouveau banc `bench_cable_immobile` (et
+  `_noyau`) : flèche dessinée en six points fixes, deux brins, 20 s en marche, sur Grattalu, la Daille, les Almes,
+  l'Olympique et la Grande Motte — monocâbles 0,0 mm, 3S et téléphérique sans aller-retour rapide (porteurs creusés
+  lentement sous chaque cabine qui passe). Si l'oscillation se voit encore, une capture vidéo dira où.
 
 ## 1.75.3 — 20 novembre 2026
 
