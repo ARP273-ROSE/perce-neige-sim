@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.75.5 — 21 novembre 2026 (non publiée)
+## 1.75.5 — 21 novembre 2026
 
 - **Funival : le « bloc » qui bouchait la vue à bord** (vidéo iPad du 21/11/2026, départ de La Daille : grands
   aplats gris, marron, roses devant la caméra). C'étaient les **passagers dessinés** de la rame : on y entre à pied
