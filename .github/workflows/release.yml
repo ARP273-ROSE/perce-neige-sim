@@ -177,7 +177,7 @@ jobs:
             libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 \
             libxcb-xkb1 libpulse0 libasound2t64 \
             libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxkbfile1 libxshmfence1 libgbm1 libminizip1
-          pip install -q pytest cryptography -r "${{ steps.kit.outputs.requirements }}"
+          pip install -q pytest pytest-timeout cryptography -r "${{ steps.kit.outputs.requirements }}"
       - name: Essais
         if: steps.kit.outputs.cibles != ''
         env:

@@ -187,6 +187,12 @@ func _ready() -> void:
 				main.set("_t_jour", 0.0)
 				message("Heure de jeu : " + HeureJeu.libelle(), 3.0)))
 	col.add_child(b_h)
+	# mode réseau : skier à plusieurs (PWA et PC dans le même salon)
+	var b_r: Button = _bouton("RÉSEAU", "Skier à plusieurs : créer un salon (un code à donner) ou en rejoindre un")
+	b_r.pressed.connect(func() -> void:
+		if main != null:
+			PanneauReseau.ouvrir(self, main.reseau_client()))
+	col.add_child(b_r)
 	_b_vue = _bouton("1re PERS.", "Vue à la première ou à la troisième personne (touche V)")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)
