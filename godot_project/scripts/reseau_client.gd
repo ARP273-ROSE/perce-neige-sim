@@ -76,6 +76,11 @@ var _reconnexions: int = 0
 var _t_reconnexion: float = -1.0
 var _voulu: bool = false
 var _re: RegEx = null
+## Piques du mode réseau (21/11/2026) : GuetReseau décide, on affiche.
+var guet: GuetReseau = GuetReseau.new()
+var _t_guet: float = 0.0
+var _seul_s: float = 0.0
+var _rtt: float = 0.0
 
 
 func _init() -> void:
@@ -202,6 +207,7 @@ func _statut(t: String) -> void:
 # --- boucle -----------------------------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	_guetter(delta)
 	if _ws == null:
 		if _voulu and _t_reconnexion >= 0.0:
 			_t_reconnexion -= delta
@@ -230,6 +236,7 @@ func _process(delta: float) -> void:
 			if jeton != "":
 				_entree["jeton"] = jeton
 			_statut("Coupé (%s) — reconnexion…" % raison)
+			guet.signaler("COUPURE", temps_local())
 		else:
 			_voulu = false
 			_statut("Déconnecté" + ((" (%s)" % raison) if raison != "" else ""))
@@ -244,6 +251,8 @@ func _recevoir(txt: String) -> void:
 	match String(d.get("t", "")):
 		"bienvenue":
 			connecte = true
+			if _reconnexions > 0:
+				guet.signaler("RECONNEXION", temps_local())
 			_reconnexions = 0
 			code = String(d.get("code", ""))
 			mon_id = int(d.get("id", -1))
@@ -260,12 +269,15 @@ func _recevoir(txt: String) -> void:
 			LigneRemontee.sur_geste = _geste_ligne
 			_statut("Salon %s — %d joueur(s)" % [code_lisible(code), pairs.size() + 1])
 		"arrivee":
-			hote_id = int(d.get("hote", hote_id))
+			_changer_hote(int(d.get("hote", hote_id)))
 			_nouveau_pair(int(d["id"]), String(d.get("nom", "")), d.get("c", [0.8, 0.2, 0.2]))
+			guet.signaler("ARRIVEE", temps_local(), String(d.get("nom", "")))
 			_statut("Salon %s — %d joueur(s)" % [code_lisible(code), pairs.size() + 1])
 		"depart":
-			hote_id = int(d.get("hote", hote_id))
+			if pairs.has(int(d["id"])):
+				guet.signaler("DEPART", temps_local(), String(pairs[int(d["id"])]["nom"]))
 			pairs.erase(int(d["id"]))
+			_changer_hote(int(d.get("hote", hote_id)))
 			if hote_id == mon_id:
 				var change_p: bool = false
 				for n in pilotes.keys():
@@ -296,6 +308,7 @@ func _recevoir(txt: String) -> void:
 					best = me
 			decalage = float(best[1])
 			a_decalage = true
+			_rtt = float(_mesures[_mesures.size() - 1][0])
 		"lignes":
 			_caler(d, int(d.get("id", -1)))
 		"cmd":
@@ -715,7 +728,7 @@ func _dessiner() -> void:
 			continue
 		pairs[id]["rendu"] = e
 		liste.append([e["p"], e["cap"], e["po"], pairs[id]["c"], pairs[id]["nom"]])
-		carte.append([Vector2((e["p"] as Vector3).x, (e["p"] as Vector3).z), pairs[id]["c"], pairs[id]["nom"]])
+		carte.append([Vector2((e["p"] as Vector3).x, (e["p"] as Vector3).z), pairs[id]["c"], pairs[id]["nom"], e["cap"]])
 	dessin.poser(liste)
 	_carte_distants(carte)
 
@@ -724,3 +737,79 @@ func _carte_distants(l: Array) -> void:
 	var cs: Node = main.get("commandes_skieur") if main != null else null
 	if cs != null and cs.get("carte") != null:
 		cs.carte.distants = l
+
+
+# --- piques (21/11/2026) ------------------------------------------------------------------------------------
+
+## Nouvel hôte annoncé par le relais : pique si ce n'est plus le même (pas au premier accueil).
+func _changer_hote(h: int) -> void:
+	if h != hote_id and hote_id != -1 and h != -1:
+		if h == mon_id:
+			guet.signaler("HOTE_MOI", temps_local())
+		elif pairs.has(h):
+			guet.signaler("HOTE_AUTRE", temps_local(), String(pairs[h]["nom"]))
+	hote_id = h
+
+
+## Deux fois par seconde : la situation pour GuetReseau, et la pique qu'il choisit, s'il en choisit une.
+func _guetter(delta: float) -> void:
+	_seul_s = _seul_s + delta if connecte and pairs.is_empty() else 0.0
+	_t_guet -= delta
+	if _t_guet > 0.0 or main == null:
+		return
+	_t_guet = 0.5
+	var r: Array = guet.observer(temps_local(), observation(), 0.5)
+	if r.is_empty():
+		return
+	var cs: Node = main.get("commandes_skieur")
+	if cs == null or not cs.has_method("pique"):
+		return
+	var lang: String = "fr"
+	var ch: Variant = main.get("challenge")
+	if ch != null and ch.get("lang") != null:
+		lang = String(ch.lang)
+	var t: String = PiquesReseau.texte("RESEAU_" + String(r[0]), lang, String(r[1]), float(r[2]), float(r[3]))
+	if t != "":
+		cs.pique(t, 7.0)
+		main.set("_pique_attente", 12.0)     # (les autres piques du skieur laissent la place)
+
+
+## Situation vue par le guet des piques (bancs : appelable seule).
+func observation() -> Dictionary:
+	var o: Dictionary = {"connecte": connecte, "latence": _rtt, "seul_s": _seul_s, "pairs": [],
+		"pilote_ici": "", "urgence_ici": "", "a_bord": false, "ma_vitesse": 0.0}
+	var sk: Node3D = main.get("skieur") if main != null else null
+	if sk == null or not is_instance_valid(sk):
+		return o
+	var moi: Vector3 = sk.global_position
+	var mv: Vector3 = sk.get("velocity") if sk.get("velocity") != null else Vector3.ZERO
+	o["ma_vitesse"] = mv.length()
+	var rd: Node = main.get("remontees")
+	var ab: Array = rd.get("a_bord") if rd != null else []
+	o["a_bord"] = not ab.is_empty() or (main.has_method("_rame_du_skieur") and main.call("_rame_du_skieur") != null)
+	for id in pairs:
+		var e: Dictionary = pairs[id].get("rendu", {})
+		if e.is_empty():
+			continue
+		var p: Vector3 = e["p"]
+		var sn: Array = pairs[id]["snaps"]
+		var v: Vector3 = Vector3.ZERO
+		if not sn.is_empty():
+			var der: Dictionary = sn[sn.size() - 1]
+			v = Vector3(der["v"][0], der["v"][1], der["v"][2])
+		o["pairs"].append({"nom": String(pairs[id]["nom"]), "dist": moi.distance_to(p), "v_rel": (v - mv).length(),
+			"vitesse": v.length(), "skie": int(e.get("po", 1)) in [0, 4], "bord": bool(e.get("bord", false))})
+	# la remontée où l'on est : son pilote (s'il a pris la main) et son arrêt d'urgence
+	var lg: LigneRemontee = null
+	if not ab.is_empty() and ab[0] is LigneRemontee:
+		lg = ab[0]
+	elif rd != null and rd.has_method("ligne_courante"):
+		lg = rd.call("ligne_courante", moi)
+	if lg != null and is_instance_valid(lg):
+		var n: String = String(lg.name)
+		var pil: int = int(pilotes.get(n, hote_id))
+		if pilotes.has(n) and pil != mon_id and pairs.has(pil):
+			o["pilote_ici"] = String(pairs[pil]["nom"])
+		if lg.etat == "urgence" and pil != mon_id and pairs.has(pil):
+			o["urgence_ici"] = String(pairs[pil]["nom"])
+	return o

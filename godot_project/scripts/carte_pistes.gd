@@ -23,8 +23,13 @@ var gares: Array = []                    # [Vector3 gare basse, Vector3 gare hau
 var trace_funi: PackedVector2Array = PackedVector2Array()
 var main: Node = null
 var echelle: float = 0.18
-## Mode réseau : les autres joueurs du salon, [position xz monde, couleur, nom] (posé par ReseauClient).
+## Mode réseau : les autres joueurs du salon, [position xz monde, couleur, nom, cap] (posé par ReseauClient).
 var distants: Array = []
+## Skieurs automatiques des pistes (21/11/2026 : « rajoute position autres skieurs sur la carte ») : petits points
+## discrets, relus 3 fois par seconde, PNJ_MAX au plus.
+const PNJ_MAX: int = 60
+var pnj: PackedVector2Array = PackedVector2Array()
+var _t_pnj: float = 0.0
 var _t: float = 0.0
 var _police: Font = null
 ## Décalage du centre de la carte par rapport au skieur, en mètres (glisser).
@@ -221,10 +226,24 @@ func _process(delta: float) -> void:
 func _process_corps(delta: float) -> void:
 	if not visible:
 		return
+	_t_pnj -= delta
+	if _t_pnj <= 0.0:
+		_t_pnj = 0.33
+		_lire_pnj()
 	_t -= delta
 	if _t <= 0.0:
 		_t = 0.2
 		queue_redraw()
+
+
+func _lire_pnj() -> void:
+	pnj.clear()
+	var sp: Node = domaine.get("skieurs") if domaine != null else null
+	if sp == null or not is_instance_valid(sp):
+		return
+	var ps: PackedVector3Array = sp.get("positions")
+	for k in range(mini(ps.size(), PNJ_MAX)):
+		pnj.append(Vector2(ps[k].x, ps[k].z))
 
 
 ## Tapis roulants (TapisRoulant, hors des lignes) : [nom, bas (x, z), haut (x, z)] — retour d'utilisateur du
@@ -443,14 +462,12 @@ func _draw() -> void:
 			HUD.disque(self, rp, 7.5, Color(0.0, 0.0, 0.0, 0.9))
 			HUD.disque(self, rp, 6.0, Color(1.0, 0.85, 0.1, 1.0))
 			draw_string(_police, rp + Vector2(-3.5, 4.5), num, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0))
-	# les autres joueurs du salon (mode réseau) : un point à leur couleur, leur nom
-	for dj in distants:
-		var dp: Vector2 = _carte(dj[0], c, o)
-		if not Rect2(Vector2.ZERO, TAILLE).grow(-4.0).has_point(dp):
-			continue
-		HUD.disque(self, dp, 7.0, Color(0, 0, 0, 0.9))
-		HUD.disque(self, dp, 5.5, dj[1])
-		noms.append([String(dj[2]), dp + Vector2(2, -6), Color(1, 1, 1)])
+	# skieurs automatiques : petits points gris clair, sans nom (sous les joueurs)
+	var cadre_pnj: Rect2 = Rect2(Vector2.ZERO, TAILLE).grow(-2.0)
+	for q in pnj:
+		var pp: Vector2 = _carte(q, c, o)
+		if cadre_pnj.has_point(pp):
+			draw_rect(Rect2(pp - Vector2(1.5, 1.5), Vector2(3, 3)), Color(0.85, 0.88, 0.92, 0.75))
 	# noms par-dessus les tracés
 	for n in noms:
 		var pos: Vector2 = n[1]
@@ -482,6 +499,9 @@ func _draw() -> void:
 		draw_colored_polygon(tri, Color(1.0, 0.25, 0.15, 1.0))
 		for i in range(3):
 			HUD.segment(self, tri[i], tri[(i + 1) % 3], Color(1, 1, 1), 1.5)
+	# les autres joueurs du salon (mode réseau), par-dessus tout : flèche à leur couleur dans leur direction, cerclée
+	# de noir, leur nom ; hors cadre, un repère à leur couleur sur le bord
+	_dessiner_joueurs(c, o)
 	# échelle
 	var m: float = 100.0
 	for cand in [50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0]:
@@ -493,3 +513,34 @@ func _draw() -> void:
 	draw_string(_police, Vector2(10, y - 5), ("%d m" % m) if m < 1000.0 else ("%d km" % int(m / 1000.0)),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.9))
 	draw_string(_police, Vector2(TAILLE.x * 0.5 - 4, 16), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.9))
+
+
+func _dessiner_joueurs(c: Vector2, o: Vector2) -> void:
+	var cadre: Rect2 = Rect2(Vector2.ZERO, TAILLE).grow(-12.0)
+	for dj in distants:
+		var dp: Vector2 = _carte(dj[0], c, o)
+		var col: Color = dj[1]
+		var nom: String = String(dj[2])
+		if cadre.has_point(dp):
+			var cap: float = float(dj[3]) if (dj as Array).size() > 3 else 0.0
+			var av: Vector2 = Vector2(-sin(cap), -cos(cap))
+			var dr: Vector2 = Vector2(-av.y, av.x)
+			HUD.disque(self, dp, 9.0, Color(0, 0, 0, 0.9))
+			var fl: PackedVector2Array = PackedVector2Array([dp + av * 8.0, dp - av * 5.0 + dr * 5.5,
+				dp - av * 2.0, dp - av * 5.0 - dr * 5.5])
+			draw_colored_polygon(fl, col.lerp(Color.WHITE, 0.15))
+			draw_string_outline(_police, dp + Vector2(10, -6), nom, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4, Color(0, 0, 0, 0.9))
+			draw_string(_police, dp + Vector2(10, -6), nom, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, col.lerp(Color.WHITE, 0.5))
+		else:
+			var u: Vector2 = (dp - o).normalized()
+			var k: float = minf(absf(cadre.size.x * 0.5 / maxf(absf(u.x), 1e-4)),
+				absf(cadre.size.y * 0.5 / maxf(absf(u.y), 1e-4)))
+			var q: Vector2 = o + u * k
+			var n: Vector2 = Vector2(-u.y, u.x)
+			var tri: PackedVector2Array = PackedVector2Array([q + u * 7.0, q - u * 5.0 + n * 6.0, q - u * 5.0 - n * 6.0])
+			draw_colored_polygon(tri, col)
+			for i in range(3):
+				HUD.segment(self, tri[i], tri[(i + 1) % 3], Color(0, 0, 0, 0.9), 1.5)
+			var tq: Vector2 = q - u * 16.0 + Vector2(-12, 4)
+			draw_string_outline(_police, tq, nom, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color(0, 0, 0, 0.9))
+			draw_string(_police, tq, nom, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, col.lerp(Color.WHITE, 0.5))

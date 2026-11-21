@@ -105,3 +105,15 @@ static func etat_depuis(ds: Vector3, dl: Vector3, phase: float) -> Dictionary:
 ## Le soir et la nuit, après la fermeture des pistes (17 h 30) et jusqu'au matin (8 h) : heure des dameuses.
 static func heure_damage(h: float) -> bool:
 	return h >= 17.5 or h < 8.0
+
+
+## Teinte des matériaux non éclairés des remontées (linéaire) : celle du décor de jour ; la nuit (n → 1), neutralisée
+## (le bleu de la nuit éteignait les rouges et les jaunes) et relevée à un plancher de luminosité, pour garder des
+## couleurs lisibles sans éclairer comme en plein jour (retour d'essai PWA du 21/11/2026).
+const PLANCHER_REMONTEES: float = 0.11
+static func teinte_remontees(decor: Color, n: float) -> Color:
+	var l: float = decor.r * 0.3 + decor.g * 0.59 + decor.b * 0.11
+	var neutre: Color = Color(l * 0.96, l * 0.98, l * 1.06)
+	var b: Color = Color(decor.r, decor.g, decor.b).lerp(neutre, 0.75 * clampf(n, 0.0, 1.0))
+	var p: float = PLANCHER_REMONTEES * clampf(n, 0.0, 1.0)
+	return Color(maxf(b.r, p * 0.96), maxf(b.g, p * 0.98), maxf(b.b, p * 1.06))

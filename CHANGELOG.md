@@ -5,6 +5,36 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.1 — 21 novembre 2026 (non publiée)
+
+- **Piques du mode réseau** (« rajoute des phrases sarcastiques pour le réseau ») : nouvelle banque bilingue
+  (`piques_reseau.gd`, 14 genres, plus de 45 piques, « {nom} » remplacé par l'autre joueur) — arrivée, départ,
+  coupure, reconnexion, forte latence, l'autre très loin ou qui vous frôle, même siège ou même cabine, l'autre qui
+  pilote votre remontée ou déclenche un arrêt d'urgence, l'autre beaucoup plus rapide, seul trop longtemps,
+  changement d'hôte. `GuetReseau` décide (logique pure) : événements en file, déclencheurs sur passage de seuil et non
+  tant qu'il dure, 10 s au moins entre deux piques réseau, répit propre à chaque genre ; tirage sans redite
+  rapprochée (PNQuips).
+- **Piques de la descente à la corde** sur la physique réelle du pendule : balancement (corde à plus de 5° de la
+  verticale), tournoiement (plus de 0,3 rad/s), rebond au palier (tension au-delà de 1,3 fois le poids), vent
+  (plus de 7 m/s), temps passé suspendu (plus d'une minute) ; une fois chacune par descente, 8 s entre deux, rien
+  pendant les 3 premières secondes.
+- **Le skieur du réseau se reconnaît** parmi les skieurs automatiques (« on identifie bien l'autre skieur du réseau
+  vs les skieurs auto ? ») : tenue à sa couleur (veste et casque unis, empiècements blancs en dossard, veste un peu
+  lumineuse — nuanceur des skieurs, graine à alpha négatif), étiquette nom + distance de taille fixe à l'écran,
+  chevron à sa couleur au-dessus de la tête (vu à travers le décor, grossi avec la distance), balise verticale au-delà
+  de 80 m, anneau au sol à ski, et hors champ une flèche au bord de l'écran avec son nom et sa distance.
+- **Carte** (« rajoute position autres skieurs sur la carte ») : les joueurs du réseau y sont dessinés par-dessus
+  tout, flèche à leur couleur dans leur direction et nom, avec un repère sur le bord quand ils sont hors cadre ; les
+  skieurs automatiques des pistes y paraissent en petits points discrets (relus 3 fois par seconde, 60 au plus).
+- **Remontées la nuit sur la PWA** (« les sièges sont monochromes, les pneus et tout, les pylônes aussi ») : les
+  matériaux non éclairés des remontées (lignes cuites, véhicules et pylônes allégés) prenaient la teinte bleue et très
+  sombre du décor nocturne, qui éteignait rouges et jaunes ; leur teinte est maintenant neutralisée la nuit et relevée
+  à un plancher de luminosité (`CycleJour.teinte_remontees`). Vérifié en capture OpenGL au format iPad et en Vulkan ;
+  l'effet exact sur l'iPad reste à confirmer.
+- **Bancs** : `bench_piques_reseau` (banques, déclencheurs, seuils, écarts, file, piques de la corde sur une descente
+  simulée, identification : étiquette, chevron, balise, anneau, indicateur hors champ seulement hors champ) ;
+  `bench_carte_joueurs_3d` (points des skieurs des pistes plafonnés, joueurs avec leur cap).
+
 ## 1.76.0 — 21 novembre 2026 — Mode réseau
 
 - **Toutes les remontées calées entre joueurs** (« cale tout », 21/11/2026). Chaque remontée a un **pilote**, l'hôte

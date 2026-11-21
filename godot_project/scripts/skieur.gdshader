@@ -77,20 +77,24 @@ void vertex() {
 	float g = INSTANCE_CUSTOM.r * 131.0 + INSTANCE_CUSTOM.g * 17.0 + INSTANCE_CUSTOM.b * 7.0;
 	vec3 veste = au_choix(h(g + 1.0), 16, 0);
 	vec3 veste2 = h(g + 2.0) < 0.5 ? veste : au_choix(h(g + 3.0), 16, 0);
+	// joueur du réseau (INSTANCE_CUSTOM.a < 0, 21/11/2026) : veste et casque de SA couleur, empiècements blancs
+	// (dossard), veste légèrement lumineuse : on le distingue des skieurs automatiques, de jour comme de nuit
+	bool joueur = INSTANCE_CUSTOM.a < -0.5;
+	if (joueur) { veste = INSTANCE_CUSTOM.rgb; veste2 = vec3(0.94, 0.94, 0.90); }
 	vec3 peau = au_choix(h(g + 4.0), 6, 4);
 	vec3 c = veste;
 	float rough = 0.62;
 	float metal = 0.0;
 	float emis = 0.0;
 	if (part == 0) { c = peau; rough = 0.55; }
-	else if (part == 1) { c = veste; rough = 0.58; }
+	else if (part == 1) { c = veste; rough = 0.58; emis = joueur ? 0.35 : 0.0; }
 	else if (part == 2) { c = veste2; rough = 0.58; }
 	else if (part == 3) { c = au_choix(h(g + 5.0), 10, 1); rough = 0.72; }
 	else if (part == 4) { c = au_choix(h(g + 6.0), 7, 6); rough = 0.30; }
 	else if (part == 5) { c = vec3(0.62, 0.63, 0.66); metal = 0.85; rough = 0.30; }
 	else if (part == 6) { c = vec3(0.025, 0.025, 0.03); rough = 0.75; }
 	else if (part == 7) { c = h(g + 7.0) < 0.15 ? veste : au_choix(h(g + 8.0), 5, 7); rough = 0.80; }
-	else if (part == 8) { c = au_choix(h(g + 9.0), 8, 2); rough = h(g + 10.0) < 0.5 ? 0.30 : 0.70; }
+	else if (part == 8) { c = joueur ? veste : au_choix(h(g + 9.0), 8, 2); rough = h(g + 10.0) < 0.5 ? 0.30 : 0.70; }
 	else if (part == 9) { c = au_choix(h(g + 11.0), 6, 3); metal = 0.92; rough = 0.08; }
 	else if (part == 10) { c = h(g + 12.0) < 0.6 ? vec3(0.03, 0.03, 0.035) : veste2; rough = 0.50; }
 	else if (part == 11) { c = au_choix(h(g + 13.0), 5, 9); rough = 0.70; }

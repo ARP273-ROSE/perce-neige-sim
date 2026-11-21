@@ -528,6 +528,35 @@ const CORDE_SOL_COMMUN: Array = [
 	["Arrivé en bas par le chemin le plus court. Et le plus étroit.", "Reached the bottom by the shortest route. And the narrowest."],
 	["Sain et sauf. La remontée, elle, n'a toujours pas bougé.", "Safe and sound. The lift still hasn't moved."],
 ]
+## Descente à la corde, sur les grandeurs du pendule (21/11/2026 : « des phrases sarcastiques pour la corde qui
+## bouge ») : balancement, tournoiement, rebond au palier, vent, temps passé suspendu (PenduleCorde).
+const CORDE_BALANCE_COMMUN: Array = [
+	["Vous balancez. Un pendule de Foucault, en moins scientifique et en plus inquiet.", "You're swinging. A Foucault pendulum, less scientific and more worried."],
+	["Période d'environ six secondes : la physique est ponctuelle. Votre estomac, moins.", "A period of about six seconds: physics is punctual. Your stomach, less so."],
+	["Gauche, droite, gauche. Le secouriste compte les allers-retours, pas vous.", "Left, right, left. The rescuer counts the swings, you don't have to."],
+	["Ne gigotez pas : chaque coup de jambe relance le pendule. Oui, celui-là aussi.", "Stop wriggling: every kick restarts the pendulum. Yes, that one too."],
+]
+const CORDE_TOURNE_COMMUN: Array = [
+	["Vous tournez sur vous-même. La corde se dévrille, vous vous émerveillez.", "You're spinning. The rope unwinds; you get the panoramic tour."],
+	["Visite panoramique à 360° offerte par la torsion de la corde. Sans supplément.", "A 360° panoramic tour, courtesy of rope twist. No extra charge."],
+	["La corde vrillée vous ramène face à la pente. Puis de dos. Puis face. Choisissez.", "The twisted rope turns you back to the slope. Then away. Then back. Pick one."],
+	["Toupie humaine homologuée EN 1891. Le vertige, lui, n'est pas certifié.", "Human spinning top, EN 1891 approved. The dizziness isn't certified."],
+]
+const CORDE_REBOND_COMMUN: Array = [
+	["Le descendeur bloque, la corde s'étire, vous rebondissez. Trois pour cent d'allongement, cent pour cent de surprise.", "The descender locks, the rope stretches, you bounce. Three per cent stretch, a hundred per cent surprise."],
+	["Petit rebond au palier : c'est la corde qui respire. Pas vous, visiblement.", "A little bounce at the stop: that's the rope breathing. Clearly not you."],
+	["Arrêt net. La corde encaisse une fois et demie votre poids, en silence. Vous, moins.", "Sudden stop. The rope takes one and a half times your weight, silently. Unlike you."],
+]
+const CORDE_VENT_COMMUN: Array = [
+	["Le vent vous pousse comme un drapeau. Un drapeau très mal fixé.", "The wind pushes you like a flag. A very badly fastened flag."],
+	["Rafale : vous découvrez la traînée aérodynamique d'un corps assis. Elle est médiocre.", "Gust: you're discovering the drag of a seated body. It's mediocre."],
+	["Avec ce vent, la verticale devient une opinion.", "In this wind, vertical becomes a matter of opinion."],
+]
+const CORDE_LONG_COMMUN: Array = [
+	["Une minute suspendu. Vous connaissez désormais chaque fibre de cette corde.", "A minute hanging. You now know every fibre of this rope."],
+	["Le temps passe lentement au bout d'une corde. Surtout pour celui qui est au bout.", "Time passes slowly at the end of a rope. Especially for whoever is on the end."],
+	["Toujours là-haut. Le secouriste dit « on y est presque ». Il le dit à tout le monde.", "Still up there. The rescuer says 'nearly there'. He says it to everyone."],
+]
 const ATTENTE_COMMUN: Array = [
 	["La cabine vous attend, portes ouvertes. Quarante personnes vous regardent arriver.", "The cabin is waiting, doors open. Forty people are watching you arrive."],
 	["On vous attend. Ne courez pas en chaussures de ski, c'est ridicule. Si, courez.", "They're waiting. Don't run in ski boots, it looks silly. Actually, run."],
@@ -536,7 +565,8 @@ const ATTENTE_COMMUN: Array = [
 	["Prenez votre temps. Non, je plaisante : ils ont un horaire.", "Take your time. Just kidding: they have a timetable."],
 	["Le véhicule patiente. Vous êtes officiellement « le client qu'on attend ».", "The vehicle is waiting. You are officially 'that passenger'."],
 ]
-const EVENEMENTS_EXPLOITATION: Array = ["PANNE", "REPRISE", "SECOURS", "REMISE", "DEPANNAGE", "REFUS", "INTERVENTION", "EVACUATION", "HORS_SERVICE", "CORDE", "CORDE_SOL", "ATTENTE"]
+const EVENEMENTS_EXPLOITATION: Array = ["PANNE", "REPRISE", "SECOURS", "REMISE", "DEPANNAGE", "REFUS", "INTERVENTION", "EVACUATION", "HORS_SERVICE", "CORDE", "CORDE_SOL", "ATTENTE",
+	"CORDE_BALANCE", "CORDE_TOURNE", "CORDE_REBOND", "CORDE_VENT", "CORDE_LONG"]
 const EVENEMENTS: Array = ["ARRET", "FRAUDE", "CHAUSSE", "PIETON", "LOUPE", "SAUT", "DESCENTE", "ARRIVEE", "RESTE", "ARRIVEE_BAS"]
 
 
@@ -620,3 +650,39 @@ static func pique_paire(evt: String, lg: LigneRemontee) -> Array:
 	_vus[cle] = vus
 	_sauver()
 	return [String(l[k][0]), String(l[k][1])]
+
+
+## Seuils des piques de la descente à la corde (grandeurs de PenduleCorde) ; chacune une seule fois par descente,
+## pas pendant les premières secondes (la pique CORDE vient d'être affichée), au moins ECART_CORDE_S entre deux.
+const CORDE_ANGLE: float = 0.09           # rad (5°) d'inclinaison de la corde : ça balance
+const CORDE_OMEGA: float = 0.30           # rad/s de tournoiement
+const CORDE_SURTENSION: float = 1.30      # tension / poids : rebond au palier
+const CORDE_VENT_MS: float = 7.0          # m/s de vent au point de l'évacué
+const CORDE_LONG_S: float = 60.0
+const CORDE_DEBUT_S: float = 3.0
+const ECART_CORDE_S: float = 8.0
+
+
+## o : {"t", "angle", "omega", "tension", "poids", "vent"} ; deja : {genre: true, "_t": instant de la dernière}
+## (tenu par l'appelant, un par descente). Rend le genre d'événement (« CORDE_… ») ou "".
+static func evenement_corde(o: Dictionary, deja: Dictionary) -> String:
+	var t: float = float(o.get("t", 0.0))
+	if t < CORDE_DEBUT_S or t - float(deja.get("_t", -1e9)) < ECART_CORDE_S:
+		return ""
+	var poids: float = maxf(float(o.get("poids", 785.0)), 1.0)
+	var ev: String = ""
+	if float(o.get("tension", 0.0)) > CORDE_SURTENSION * poids:
+		ev = "CORDE_REBOND"
+	elif absf(float(o.get("omega", 0.0))) > CORDE_OMEGA:
+		ev = "CORDE_TOURNE"
+	elif float(o.get("angle", 0.0)) > CORDE_ANGLE:
+		ev = "CORDE_BALANCE"
+	elif float(o.get("vent", 0.0)) > CORDE_VENT_MS:
+		ev = "CORDE_VENT"
+	elif t > CORDE_LONG_S:
+		ev = "CORDE_LONG"
+	if ev == "" or deja.has(ev):
+		return ""
+	deja[ev] = true
+	deja["_t"] = t
+	return ev

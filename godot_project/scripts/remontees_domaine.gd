@@ -2051,6 +2051,12 @@ func _descendre_corde(delta: float) -> void:
 			v_dev = V_POSE_CORDE
 	pend.vent = LigneRemontee.vent_monde(t + float(int(_corde["i"]) * 17))
 	pend.avancer(delta, haut, v_dev, sol)
+	# piques sur la physique réelle du pendule (21/11/2026)
+	var ev: String = PiquesRemontees.evenement_corde({"t": t, "angle": pend.angle(haut), "omega": pend.omega,
+		"tension": pend.tension, "poids": PenduleCorde.M * PenduleCorde.G,
+		"vent": Vector2(pend.vent.x, pend.vent.z).length()}, _corde.get_or_add("piques", {}))
+	if ev != "":
+		_piquer(ev, lg)
 	_corde["sous"] = pend.l0
 	var p: Vector3 = pend.p
 	skieur.global_position = p
