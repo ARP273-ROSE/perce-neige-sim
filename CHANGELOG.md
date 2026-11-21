@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.75.4 — 20 novembre 2026 (non publiée)
+## 1.75.4 — 21 novembre 2026
 
 - **Funival, rame : rambarde en travers de la porte ouverte** (retour d'essai PWA du 21/11/2026, gare amont). Deux
   pièces barraient les baies : la lisse rouge en long, à 1 m du plancher, courait d'un bout à l'autre de la caisse à
