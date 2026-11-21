@@ -836,6 +836,8 @@ func _construire_proches() -> void:
 		# (tronçons jumelés : l'un ne tourne pas sans l'autre, construits ensemble ; l'embarquement est en bas)
 		if lg.jumelee != null and _a_cuit(lg):
 			d = minf(d, _distance_ligne(lg.jumelee, p))
+		if not forcees.is_empty() and forcees.has(String(lg.name)):
+			d = 0.0
 		if d < _construire_jusqua(lg) and d < d_best:
 			d_best = d
 			best = lg
@@ -1202,7 +1204,13 @@ func _process_corps(delta: float) -> void:
 
 
 ## Distance horizontale de p à l'axe de la ligne (segment entre les nez).
+## Bancs (bench_reseau) : lignes tenues construites et actives où que soit le skieur (vide en jeu : aucun coût).
+static var forcees: PackedStringArray = PackedStringArray()
+
+
 func _distance_ligne(lg: LigneRemontee, p: Vector3) -> float:
+	if not forcees.is_empty() and forcees.has(String(lg.name)):
+		return 0.0
 	var xf: Transform3D = lg.global_transform
 	var a: Vector3 = xf.origin
 	var b: Vector3 = xf * Vector3(0, 0, -lg.longueur_h())

@@ -23,6 +23,8 @@ var gares: Array = []                    # [Vector3 gare basse, Vector3 gare hau
 var trace_funi: PackedVector2Array = PackedVector2Array()
 var main: Node = null
 var echelle: float = 0.18
+## Mode réseau : les autres joueurs du salon, [position xz monde, couleur, nom] (posé par ReseauClient).
+var distants: Array = []
 var _t: float = 0.0
 var _police: Font = null
 ## Décalage du centre de la carte par rapport au skieur, en mètres (glisser).
@@ -441,6 +443,14 @@ func _draw() -> void:
 			HUD.disque(self, rp, 7.5, Color(0.0, 0.0, 0.0, 0.9))
 			HUD.disque(self, rp, 6.0, Color(1.0, 0.85, 0.1, 1.0))
 			draw_string(_police, rp + Vector2(-3.5, 4.5), num, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0))
+	# les autres joueurs du salon (mode réseau) : un point à leur couleur, leur nom
+	for dj in distants:
+		var dp: Vector2 = _carte(dj[0], c, o)
+		if not Rect2(Vector2.ZERO, TAILLE).grow(-4.0).has_point(dp):
+			continue
+		HUD.disque(self, dp, 7.0, Color(0, 0, 0, 0.9))
+		HUD.disque(self, dp, 5.5, dj[1])
+		noms.append([String(dj[2]), dp + Vector2(2, -6), Color(1, 1, 1)])
 	# noms par-dessus les tracés
 	for n in noms:
 		var pos: Vector2 = n[1]

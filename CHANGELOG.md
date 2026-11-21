@@ -5,6 +5,61 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.0 — 21 novembre 2026 — Mode réseau
+
+- **Toutes les remontées calées entre joueurs** (« cale tout », 21/11/2026). Chaque remontée a un **pilote**, l'hôte
+  du salon par défaut ; il publie deux fois par seconde l'état de celles qui tournent chez lui, et chacun ne retient
+  que celui du pilote :
+  - état d'exploitation (marche, arrêt, arrêt d'urgence — avec l'onde du câble —, réarmement), cran, plafond des
+    pannes, pour toutes ;
+  - débrayables, pinces fixes, téléskis : marche du temps ajustée jusqu'aux mêmes places ; **tronçons jumelés Bollin /
+    Fresse** compris, calés sur le tronçon haut (calés sur le bas, les sièges du haut pouvaient rester décalés d'un
+    siège du bas, l'autre solution du jumelage : 30 m d'écart mesurés) ;
+  - **téléphériques et Funival** : état complet (position, vitesse, sens, quai ou route, temps de quai, portes) ;
+  - **funiculaire Perce-Neige** : position de la rame, sens, portes, urgence ; chez les autres joueurs, la rame suit,
+    sa physique locale suspendue.
+  - Passager à bord : même véhicule et même place chez l'autre — par son numéro pour les va-et-vient, par la rame
+    (même place dans la rame) au funiculaire.
+- **Pilotage partagé** : une commande au poste ou au pupitre (ExploitationRemontee.commande), ou mener le
+  funiculaire, demande la main sur la remontée ; l'hôte l'accorde si personne d'autre n'y a touché depuis une minute
+  et publie les pilotes ; le geste n'est pas défait le temps de la réponse (1,5 s). Relais : nouveaux messages `cmd`
+  (relayés à tous ; seul l'hôte arbitre) et `pilotes` (de l'hôte seulement) ; état des remontées accepté de tout
+  joueur du salon, schéma strict (8 champs bornés, 16 remontées par message, 8 nombres propres au genre de ligne),
+  place dans un véhicule jusqu'à ±40 m (rames). Relais redéployé, mêmes options de sécurité.
+- **Banc** `bench_reseau` étendu (A avec le module C++, hôte ; B en GDScript comme la PWA), relevés sur une grille de
+  temps commun après 20 s de mise en route : funiculaire 0,00 m, Funival p95 0,13 m, TPH Grande Motte p95 0,12 m,
+  Bollin p95 0,55 m, Fresse p95 0,35 m, Grattalu p95 0,08 m ; arrêt d'urgence de Grattalu par A vu par B en 1 s ;
+  arrêt du TPH par B (pilote accordé par l'hôte) vu par A en 1 s. Essais du relais : `cmd`, `pilotes`, nouvelles
+  bornes.
+
+- **Skier à plusieurs, PC et tablette dans le même salon** (demande d'utilisateur du 21/11/2026 : « un mode réseau
+  que je puisse skier avec mon frère, intercompatible PWA / PC », « de n'importe où sur terre », « sécu max »).
+  Bouton **RÉSEAU** du skieur : nom, couleur, **CRÉER** (un code de 8 caractères, affiché XXXX-XXXX, à donner) ou
+  **REJOINDRE** (saisir le code), QUITTER LE SALON. Au PC, l'adresse du relais se règle dans le panneau (gardée dans
+  les réglages de l'utilisateur, hors du dépôt) ou par `--reseau=URL` ; dans le navigateur, `/reseau` de l'origine
+  de la page (wss:// en https).
+- **Relais** (`reseau/relais/`, Python asyncio + `websockets` figé) : il ne calcule rien du jeu, il redistribue
+  l'état de chaque joueur aux autres du salon et donne l'heure commune. Sécurité : salons à code aléatoire (alphabet
+  sans ambiguïté), jeton HMAC de l'hôte (reprise après coupure), 8 joueurs par salon, 200 salons au plus, salons vides
+  expirés après 10 min ; schéma strict (chaque champ typé et borné, message reconstruit, rien d'autre relayé), 1 Ko
+  par message, 20 messages/s (rafale 30) puis coupure, 8 connexions par adresse, 400 au total, origine web vérifiée,
+  entrée exigée dans les 10 s, ping 20 s ; ne journalise que des compteurs (aucune adresse, aucun nom, aucun code).
+  Conteneur : utilisateur sans droits, système de fichiers en lecture seule, aucune capacité, pas de nouveaux
+  privilèges, 128 Mo, ½ cœur, 64 processus.
+- **Jeu** (GDScript seul, PWA comme PC : `ReseauClient`, `SkieursDistants`, `PanneauReseau`) : état envoyé
+  10 fois par seconde (position, cap, vitesse, posture ; à bord : ligne, véhicule, abscisse, place) en temps commun
+  (décalage pris sur l'échange d'horloge au plus court aller-retour) ; les autres sont dessinés 0,12 s en retard,
+  interpolés (extrapolés 0,3 s au plus), habillés à leur couleur, leur nom au-dessus, en point sur la carte ; à bord,
+  posés dans le véhicule de NOTRE ligne le plus proche de leur abscisse. **Remontées calées** : l'hôte diffuse
+  chaque seconde l'abscisse d'un véhicule en ligne des lignes proches de lui, chacun ajuste de ±25 % au plus la
+  marche du temps de la même ligne (`LigneRemontee.facteur_temps`) — mêmes véhicules aux mêmes places (modulo
+  l'espacement ; lignes jumelées et va-et-vient exclues). Hors réseau : rien de créé, coût nul.
+- **Mesuré** : `bench_reseau` lance le relais et deux jeux sans écran en temps réel (A avec le module C++, hôte ;
+  B en GDScript seul, comme la PWA). A skie 14 s à 10 m/s puis s'assied sur un siège du TSD de Grattalu : B le
+  dessine à 0,03 m (médiane), 0,05 m (p95) à ski ; à bord, 0,03 m (médiane), 0,12 m (p95), toujours dans un de ses
+  sièges. `tests/test_reseau_relais.py` : schéma, bornes, débits, salons, expiration, et un échange réel (deux
+  clients, mauvais code, message trop gros, débit dépassé).
+
 ## 1.75.5 — 21 novembre 2026
 
 - **Funival : le « bloc » qui bouchait la vue à bord** (vidéo iPad du 21/11/2026, départ de La Daille : grands
