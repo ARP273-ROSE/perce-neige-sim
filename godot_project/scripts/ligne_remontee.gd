@@ -805,6 +805,30 @@ func _maj_skieurs_perches() -> void:
 		(_tires_mmi[k3] as MultiMeshInstance3D).multimesh.visible_instance_count = n_c[k3]
 
 
+## Rames et cabines où l'on entre à pied (Funival, téléphériques) : passagers dessinés écartés de la caméra et du
+## skieur quand ils sont dedans (VehiculeRemontee.degager_passagers).
+static var r_degage_pax: float = 1.1
+
+
+func _degager_autour(v: VehiculeRemontee, p_cam: Vector3) -> void:
+	var pts: Array = []
+	var sk: Node3D = null
+	var m: Node = null
+	if is_inside_tree():
+		m = get_tree().root.get_node_or_null("Main")
+		if m == null:
+			m = get_tree().current_scene
+	if m != null and m.get("skieur") is Node3D:
+		sk = m.get("skieur")
+	var inv: Transform3D = v.global_transform.affine_inverse()
+	var a: AABB = AABB(Vector3(-4.0, -6.0, -24.0), Vector3(8.0, 12.0, 48.0))    # (rame du Funival, cabine du TPH)
+	for q in [p_cam, sk.global_position + Vector3(0, 1.0, 0) if sk != null else Vector3.INF]:
+		var ql: Vector3 = inv * (q as Vector3) if (q as Vector3) != Vector3.INF else Vector3.INF
+		if ql != Vector3.INF and a.grow(1.0).has_point(ql):
+			pts.append(ql)
+	v.degager_passagers(pts, r_degage_pax if not pts.is_empty() else 0.0)
+
+
 ## Passagers dessinés des véhicules proches (VehiculeRemontee.poser_passagers), toutes les 0,3 s : ceux que la
 ## ligne a tirés pour le véhicule (passagers), personne dans la gare où l'on descend (montants en gare amont,
 ## descendants en gare aval).
@@ -6579,8 +6603,12 @@ static func lod_voulu_pwa() -> bool:
 	return OS.has_feature("web")
 
 
+## Bancs : les niveaux allégés de la PWA sans export web (bench_vehicules_lointains).
+static var lod_force: bool = false
+
+
 static func lod_voulu() -> bool:
-	return OS.has_feature("web") or PerfManager.allege or "--lod-vehicules" in OS.get_cmdline_user_args()
+	return lod_force or OS.has_feature("web") or PerfManager.allege or "--lod-vehicules" in OS.get_cmdline_user_args()
 
 
 ## Pièces des pylônes vues de loin (portée `portee`, le fût et sa tête : même géométrie de près
@@ -6852,7 +6880,7 @@ func _lod_niveau(i: int, niv: int, d2: float) -> bool:
 			change = true
 		if niv == 1 or niv == 2:
 			_lod_slot[i] = _lod_nb[niv - 1]
-			(_lod_qui[niv - 1] as PackedInt32Array)[_lod_nb[niv - 1]] = i
+			_lod_qui_poser(niv - 1, _lod_nb[niv - 1], i)
 			_lod_nb[niv - 1] += 1
 	if niv == 1 or niv == 2:
 		# (au-delà de 250 m, une image sur quatre, comme les véhicules complets)
@@ -6871,6 +6899,17 @@ func _lod_niveau(i: int, niv: int, d2: float) -> bool:
 	return change
 
 
+## Place `slot` du niveau `k` → véhicule `i`. (Retour d'essai PWA du 21/11/2026, vidéo iPad, gare aval de Bellevarde :
+## « des sièges figés au milieu de sièges qui marchent ». Écrit `(_lod_qui[k] as PackedInt32Array)[slot] = i`, la
+## conversion faisait une COPIE du tableau compact : la table place → véhicule restait à zéro, _lod_oter déplaçait les
+## données du dernier allégé dans la place libérée sans le dire à son véhicule, qui écrivait ensuite hors du compte —
+## l'instance déplacée restait dessinée, figée, à sa dernière place ; une pile de sièges allégés devant la gare.)
+func _lod_qui_poser(k: int, slot: int, i: int) -> void:
+	var q: PackedInt32Array = _lod_qui[k]
+	q[slot] = i
+	_lod_qui[k] = q
+
+
 ## Instances tassées au début du tampon : le MultiMesh ne dessine que `visible_instance_count`. (Une
 ## instance mise à l'échelle zéro compte quand même tous ses triangles : 253 000 en L1 pour rien à
 ## Tovière, relevés du 04/11/2026.) Le dernier véhicule du niveau prend la place libérée.
@@ -6884,7 +6923,7 @@ func _lod_oter(i: int, k: int) -> void:
 			else:
 				_lod_b2[s0 * 12 + c] = _lod_b2[der * 12 + c]
 		var q: int = (_lod_qui[k] as PackedInt32Array)[der]
-		(_lod_qui[k] as PackedInt32Array)[s0] = q
+		_lod_qui_poser(k, s0, q)
 		_lod_slot[q] = s0
 	_lod_nb[k] = der
 	_lod_slot[i] = -1

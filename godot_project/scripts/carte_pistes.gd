@@ -80,8 +80,54 @@ func _centre() -> Vector2:
 
 
 func zoomer(f: float) -> void:
-	echelle = clampf(echelle * f, ECHELLE_MIN, ECHELLE_MAX)
+	echelle = clampf(echelle * f, echelle_min(), ECHELLE_MAX)
+	_borner()
 	queue_redraw()
+
+
+## Carte bornée au domaine (retour d'utilisateur du 21/11/2026 : « la carte ne doit pas pouvoir être déplacée ni
+## dézoomée au-delà du périmètre du domaine ») : emprise des remontées (gares aval et amont, tapis), plus une marge.
+const MARGE_EMPRISE: float = 600.0       # m autour de la remontée la plus excentrée
+var _emprise: Rect2 = Rect2()
+
+
+func emprise() -> Rect2:
+	if _emprise.size != Vector2.ZERO:
+		return _emprise
+	var pts: Array = []
+	for r in _remontees():
+		pts.append(r[1])
+		pts.append(r[2])
+	for t in _tapis():
+		pts.append(t[1])
+	if pts.is_empty():
+		return Rect2(Vector2(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD),
+			Vector2(ReliefDonnees.X_EST - ReliefDonnees.X_OUEST, ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD))
+	var e: Rect2 = Rect2(pts[0], Vector2.ZERO)
+	for q in pts:
+		e = e.expand(q)
+	_emprise = e.grow(MARGE_EMPRISE)
+	return _emprise
+
+
+## Échelle la plus petite (dézoom maximal) : la carte couvre l'emprise du domaine dans son sens le plus court, jamais
+## au-delà (dans l'autre sens, on la fait glisser).
+func echelle_min() -> float:
+	var e: Rect2 = emprise()
+	return clampf(maxf(TAILLE.x / maxf(e.size.x, 1.0), TAILLE.y / maxf(e.size.y, 1.0)), ECHELLE_MIN, ECHELLE_MAX)
+
+
+## Centre de la carte ramené dans l'emprise : on ne fait pas glisser la carte hors du domaine. Le bord de la vue
+## peut toucher le bord de l'emprise, pas au-delà (si la vue est plus grande que l'emprise, centrée dessus).
+func _borner() -> void:
+	var e: Rect2 = emprise()
+	var demi: Vector2 = TAILLE * 0.5 / echelle
+	var c: Vector2 = _centre()
+	var lo: Vector2 = e.position + demi
+	var hi: Vector2 = e.end - demi
+	var cb: Vector2 = Vector2(clampf(c.x, minf(lo.x, hi.x), maxf(lo.x, hi.x)) if lo.x <= hi.x else e.get_center().x,
+		clampf(c.y, minf(lo.y, hi.y), maxf(lo.y, hi.y)) if lo.y <= hi.y else e.get_center().y)
+	decalage += cb - c
 
 
 func _gui_input(ev: InputEvent) -> void:
@@ -132,6 +178,7 @@ func _gui_input(ev: InputEvent) -> void:
 			depl = ev.position - _pos_appui      # le bout de geste avant le seuil
 		if _glisse:
 			decalage -= depl / echelle
+			_borner()
 			_b_centre.visible = true
 			queue_redraw()
 		accept_event()

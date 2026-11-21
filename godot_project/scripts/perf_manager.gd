@@ -134,6 +134,10 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	if "--simuler-integre" in OS.get_cmdline_user_args():
 		machine["type"] = "integre"
 		machine["ram_go"] = maxf(float(machine.get("ram_go", 0.0)), 15.0)
+	# choix du joueur au PC (menu Affichage → Carte graphique « intégrée », 21/11/2026 : une carte dédiée qui
+	# plante) : la 3D tourne sur la puce du processeur, réglée comme telle même si le pilote se présente mal
+	if "--carte=integree" in OS.get_cmdline_user_args() and machine.get("type", "") != "logiciel":
+		machine["type"] = "integre"
 	var type_gpu: String = machine.get("type", "inconnu")
 	allege = not _web and (type_gpu in ["integre", "logiciel"] or "--allege" in OS.get_cmdline_user_args())
 	PerfManager.type_gpu = type_gpu

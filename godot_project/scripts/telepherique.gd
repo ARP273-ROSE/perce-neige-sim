@@ -96,6 +96,9 @@ func _maj_passagers_cabines(delta: float) -> void:
 		if _phase == "quai" and _t_quai > T_QUAI * 0.5:
 			n = 0
 		v.poser_passagers(n, hash([String(name), i]))
+		var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+		if cam != null:
+			_degager_autour(v, cam.global_position)
 
 
 func masse_cabine(i: int) -> float:
