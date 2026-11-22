@@ -582,6 +582,14 @@ class Vigie:
         # ainsi remontes d'un poste sain : « fin du gel apres 23 573 s »,
         # soit exactement les six heures et demie d'allumage de l'ordinateur.
         self._avertissement_sans_battement = False
+        # Delai avant de conclure qu'aucun battement n'est branche. Le minuteur
+        # ne bat qu'une fois la boucle d'evenements lancee, apres la
+        # construction de la fenetre : sans ce delai, le journal disait
+        # « surveillance des gels inactive » a chaque demarrage un peu lent
+        # (MountMonitor sur le PC de l'observatoire, 22/11/2026), alors que
+        # la surveillance prenait le relais deux secondes plus tard.
+        self.delai_branchement = 60.0
+        self._depart = time.monotonic()
         # Facultatif : fonction appelée DEPUIS LA VIGIE au début d'un gel, qui
         # rend un dict de contexte joint au rapport (état d'un processus
         # enfant, fin d'un journal...). La pile Python seule ne dit rien
@@ -604,6 +612,7 @@ class Vigie:
     def demarrer(self, fil_gui: int | None = None) -> None:
         self._fil_gui = fil_gui or threading.get_ident()
         self._actif = True
+        self._depart = time.monotonic()
         threading.Thread(target=self._boucle, name='vigie', daemon=True).start()
 
     def arreter(self) -> None:
@@ -615,10 +624,12 @@ class Vigie:
             retard = time.monotonic() - self._dernier
             if not self._deja_battu:
                 # Rien ne bat : ce n'est pas un gel, c'est un branchement
-                # manquant. On le dit dans le journal, une seule fois, et on
-                # se tait — mieux vaut une vigie muette qu'une vigie qui crie
-                # au loup a chaque demarrage.
-                if not self._avertissement_sans_battement:
+                # manquant -- ou un demarrage pas encore fini. Passe le delai,
+                # on le dit dans le journal, une seule fois, et on se tait —
+                # mieux vaut une vigie muette qu'une vigie qui crie au loup a
+                # chaque demarrage.
+                if (not self._avertissement_sans_battement
+                        and time.monotonic() - self._depart >= self.delai_branchement):
                     self._avertissement_sans_battement = True
                     log.warning(
                         "Vigie sans battement : aucun appel a battre() depuis "
