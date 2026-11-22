@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.76.5 — (non publiée)
+## 1.76.5 — 22 novembre 2026
 
 - **Rejoindre un salon sans clavier** (« ça ne marche toujours pas le clavier, ni sous PWA Android, ni iPad, ni
   Firefox au PC, ni dans l'appli PC : impossible de rentrer le code. Change de méthode, fais un truc simple »). Le
