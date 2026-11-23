@@ -110,3 +110,9 @@ _shots_tmp/
 /pack_hd/
 /pack_hd.tmp/
 /pack_hd.zip.part
+
+# Brouillons de bancs et de diagnostic (23/11/2026)
+godot_project/_*
+godot_project/x_*
+_bancs_logs*/
+_wt_*/
