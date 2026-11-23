@@ -47,6 +47,9 @@ var _perche: Array = []                # [temps commun, écart au point attendu 
 var _t_depart: float = -1.0
 
 
+var _rame2: bool = false          # mène la rame 2 du funiculaire (l'autre joueur la 1) : repère commun
+
+
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--role="):
@@ -63,6 +66,8 @@ func _initialize() -> void:
 			_par_liste = true
 		elif a == "--sans-noyau":
 			LigneRemontee.noyau_desactive = true
+		elif a == "--rame2":
+			_rame2 = true
 	HeureJeu.regler(2026, 2, 15, 12, 0, 1.0, false)
 	RemonteesDomaine.forcees = PackedStringArray(SUIVIES)
 	match _scenario:
@@ -111,6 +116,8 @@ func _tick() -> void:
 	var relief = _main.get("relief")
 	if relief == null or not relief.pret or _f < 30:
 		return
+	if _rame2 and not _main._scenario_rame2:
+		_main.apply_rame(true)
 	if not _main.mode_skieur:
 		_main.basculer_skieur()
 		return
@@ -198,11 +205,25 @@ func _tick() -> void:
 				_main.physics.s_prev_step = 900.0
 				_t = 0.0
 				_phase = "lignes"
+				# Funival à quai en bas, départ dans 3 s : B doit suivre sa courbe d'accélération (funival_v)
+				var fv: Telepherique = _main.remontees._ligne_nommee("funival")
+				if fv != null and fv.pret:
+					fv._s = fv._x_quai(true)
+					fv._sens = 1.0
+					fv._v = 0.0
+					fv.set("_a", 0.0)
+					fv._phase = "quai"
+					fv._t_quai = 3.0
+					fv._t_quai_tot = 0.0
 		"lignes":
 			_t += dt
 			if _t > T_URGENCE and not _evts.has("urgence_A"):
 				_main.remontees._ligne_nommee("tsd6_grattalu").exploitation().commande("urgence")
 				_evts["urgence_A"] = int(_rc.maintenant() * 2.0)
+				# commandes du funiculaire partagées : A coupe l'éclairage du tunnel et les phares
+				_main.set_tunnel_lights(false)
+				_main.physics.lights_head = false
+				_evts["drap_A"] = int(_rc.maintenant() * 2.0)
 				print("RESEAU_JOUEUR A arrêt d'urgence de Grattalu")
 			if _t > DUREE_LIGNES:
 				_fin(true)
@@ -243,12 +264,16 @@ func _relever_lignes() -> void:
 		if lg is Telepherique:
 			var t: Telepherique = lg
 			d[n] = [lg.etat, t._s, t._phase, t._sens]
+			if n == "funival":
+				d["funival_v"] = [t._phase, t._v]
 		else:
 			var kr: int = ReseauClient._reference(lg)
 			if kr < 0:
 				continue
 			d[n] = [lg.etat, fposmod(float(lg._vehicules[kr][1]), lg.espacement), lg.espacement, lg.regime()]
-	d["perce_neige"] = [str(_main.physics.emergency), _main.physics.s, str(_main.physics.doors_open)]
+	# (abscisse de la RAME 1, quelle que soit la rame menée ici)
+	var s_pn: float = PNConstants.MIROIR_S - _main.physics.s if _main._scenario_rame2 else _main.physics.s
+	d["perce_neige"] = [str(_main.physics.emergency), s_pn, str(_main.physics.doors_open), _main.pn_drapeaux()]
 	_lignes.append([k, d])
 
 

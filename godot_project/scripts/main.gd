@@ -451,6 +451,7 @@ func set_run_mode(mode: String) -> void:
 # de marche — il est appliqué dans le repère du tunnel, pas dans celui du
 # conducteur.
 func apply_rame(rame2: bool) -> void:
+	_scenario_rame2 = rame2         # (aussi en mode client : le mode réseau échange tout dans le repère de la rame 1)
 	if cabin != null:
 		cabin.passing_side = +1.0 if rame2 else -1.0
 		cabin.set_train_number(2 if rame2 else 1)
@@ -2522,6 +2523,41 @@ func _suivre_pn_reseau(delta: float) -> bool:
 	physics.s_render = physics.s
 	_client_s = physics.s
 	return true
+
+
+## Commandes du funiculaire partagées en réseau (ReseauClient.PN_CMD) : 1 phares, 2 éclairage de la cabine, 4 éclairage
+## du tunnel.
+func pn_drapeaux() -> int:
+	if physics == null:
+		return -1
+	return (1 if physics.lights_head else 0) | (2 if physics.lights_cabin else 0) | (4 if tunnel_lights_on else 0)
+
+
+func appliquer_pn_drapeaux(b: int) -> void:
+	var cour: int = pn_drapeaux()
+	if cour < 0 or cour == b:
+		return
+	var diff: int = cour ^ b
+	if client_mode:
+		# (au PC, c'est le simulateur qui tient ces états : ses touches H, C, J)
+		if state_receiver == null:
+			return
+		if diff & 1:
+			state_receiver.envoyer({"cle": "H", "enfonce": true})
+			state_receiver.envoyer({"cle": "H", "enfonce": false})
+		if diff & 2:
+			state_receiver.envoyer({"touche": "C"})
+		if diff & 4:
+			state_receiver.envoyer({"touche": "J"})
+		return
+	if diff & 1:
+		physics.lights_head = (b & 1) != 0
+		if cabin != null:
+			cabin.set_headlights(physics.lights_head)
+	if diff & 2:
+		physics.lights_cabin = (b & 2) != 0
+	if diff & 4:
+		set_tunnel_lights((b & 4) != 0)
 
 
 func reseau_client() -> ReseauClient:

@@ -118,6 +118,16 @@ func _ready() -> void:
 		_reglage_web3d(p3)
 		add_child(p3)
 		_coups3d.append(p3)
+	for nom_b in ["buzzer_lower", "buzzer_upper"]:
+		_sons[nom_b] = load("res://sounds/%s.wav" % nom_b)
+	for k in range(N_SONNERIES):
+		var pb: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+		pb.unit_size = 10.0
+		pb.max_distance = PORTEE_SONNERIE
+		pb.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		_reglage_web3d(pb)
+		add_child(pb)
+		_sonn.append([pb, ""])
 
 
 func _joueur() -> AudioStreamPlayer:
@@ -176,14 +186,74 @@ func _process_corps(delta: float) -> void:
 	_maj_gares(delta)
 	_maj_couverture(delta, sk)
 	_portiques(sk)
+	_sonneries(sk)
 	_a_bord(delta)
 	_pylone_proche()
 	_arrets()
 	_jouer_file()
 
 
+# --- sonnerie de remise en route (LigneRemontee.sonnerie_t) ---------------------------------------------------------
+
+## Buzzer des deux gares avant que la ligne reparte (buzzers du Perce-Neige : gare basse, gare haute) : bien entendu
+## autour de la gare, de moins en moins en s'éloignant, plus rien au-delà de PORTEE_SONNERIE (au milieu d'une ligne).
+const N_SONNERIES: int = 4
+const PORTEE_SONNERIE: float = 160.0
+var _sonn: Array = []                  # [AudioStreamPlayer3D, clé "ligne:aval"]
+
+
+func _sonneries(sk: Vector3) -> void:
+	var cand: Array = []
+	for e in domaine.lignes:
+		var lg: LigneRemontee = e[0]
+		if lg == null or not is_instance_valid(lg) or lg.sonnerie_t < 0.0 or not lg.roule:
+			continue
+		var L: float = lg.longueur_h()
+		for aval in [true, false]:
+			var zc: float = lg.l_gare * 0.5 if aval else -L - lg.l_gare * 0.5
+			var p: Vector3 = lg.global_transform * Vector3(0, lg.terrain(0.0 if aval else L) + 4.0, zc)
+			var d: float = p.distance_to(sk)
+			if d < PORTEE_SONNERIE:
+				cand.append([d, "%s:%d" % [lg.name, int(aval)], p, aval])
+	cand.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var pris: Dictionary = {}
+	for c in cand.slice(0, N_SONNERIES):
+		pris[c[1]] = c
+	# (un lecteur qui joue déjà cette gare la garde : la sonnerie ne recommence pas)
+	var libres: Array = []
+	for e2 in _sonn:
+		if pris.has(e2[1]):
+			var c2: Array = pris[e2[1]]
+			_volume_sonnerie(e2[0], float(c2[0]))
+			pris.erase(e2[1])
+		else:
+			libres.append(e2)
+	for e3 in libres:
+		var pb: AudioStreamPlayer3D = e3[0]
+		if pris.is_empty():
+			if pb.playing:
+				pb.stop()
+			e3[1] = ""
+			continue
+		var cle: String = pris.keys()[0]
+		var c3: Array = pris[cle]
+		pris.erase(cle)
+		e3[1] = cle
+		pb.stream = _sons["buzzer_lower" if bool(c3[3]) else "buzzer_upper"]
+		pb.global_position = c3[2]
+		_volume_sonnerie(pb, float(c3[0]))
+		pb.play()
+
+
+func _volume_sonnerie(pb: AudioStreamPlayer3D, d: float) -> void:
+	# (en plus de l'atténuation par la distance : fondu sur le dernier tiers, pas de coupure nette à la portée)
+	pb.volume_db = 4.0 - 30.0 * clampf((d - PORTEE_SONNERIE * 0.6) / (PORTEE_SONNERIE * 0.4), 0.0, 1.0)
+
+
 func _tout_couper() -> void:
 	couverture = 0.0
+	for e_s in _sonn:
+		(e_s[0] as AudioStreamPlayer3D).stop()
 	for e in _gares:
 		(e[0] as AudioStreamPlayer3D).stop()
 	_ligne.stop()

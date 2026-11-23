@@ -741,7 +741,6 @@ func _maj_skieurs_perches() -> void:
 		_preparer_tires()
 	var p_cam: Vector3 = cam.global_position
 	var portee: float = minf(VehiculeRemontee.portee_passagers(), 110.0)
-	var xm: float = signf(_x_brin(true))
 	var rd: Node = get_parent()
 	var relief: ReliefBuilder = rd.get("relief") if rd != null else null
 	var tbar: bool = famille == "perche_tbar"
@@ -759,7 +758,13 @@ func _maj_skieurs_perches() -> void:
 		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
 			continue
 		var s: float = _vehicules[i][1]
-		if signf(v.position.x) != xm or String(zone(s)[0]) != "ligne":
+		if String(zone(s)[0]) != "ligne":
+			continue
+		# brin MONTANT seulement (retour d'utilisateur, 23/11/2026 : « des skieurs auto en descente de TKE et TKD,
+		# pas possible de descendre avec ça ») : par le sens de la boucle (vers −Z, l'amont), pas par le signe de
+		# x, qui bascule là où l'axe de la ligne est décalé (virage) ou la poulie excentrée (TKD)
+		var tg: Vector3 = _point_cable(s)[1]
+		if tg.z >= -0.1 * tg.length():
 			continue
 		if not _au_magasin.is_empty() and float(_au_magasin[i]) >= 0.0:
 			continue
@@ -1762,10 +1767,15 @@ func _preparer_nez() -> void:
 	var e: float = 6.0
 	var p_a: float = atan2(y_cable(e) - y_cable(0.0), e)
 	var p_b: float = atan2(y_cable(L) - y_cable(L - e), e)
-	# un pylône juste à la sortie de la gare fait le raccord : pas de batterie en plus
-	_h_nez = [0.0 if _nez_par_pylone[0] else _demi_batterie(p_a), 0.0 if _nez_par_pylone[1] else _demi_batterie(p_b)]
+	# un pylône juste à la sortie de la gare fait le raccord : pas de batterie en plus. TSF : s'il n'a pas pu rester
+	# à hauteur de gare (relevé pour la garde au sol), le câble y sortait en pente sans un galet — angle fantôme
+	# (Rogoney amont, 5,4°) : la batterie du nez de gare le prend.
+	var tsf: bool = famille.begins_with("siege_fixe") and compressions_nez_tsf
+	_h_nez = [0.0 if _nez_par_pylone[0] and not (tsf and absf(p_a) > PENTE_NEZ_TSF) else _demi_batterie(p_a),
+		0.0 if _nez_par_pylone[1] and not (tsf and absf(p_b) > PENTE_NEZ_TSF) else _demi_batterie(p_b)]
 
 
+const PENTE_NEZ_TSF: float = deg_to_rad(1.5)    # rad : au-delà, sortie de gare en pente → batterie de nez
 const NEZ_PYLONE: float = 45.0          # m : un pylône plus près que ça du nez fait le raccord
 const NEZ_PYLONE_C: float = 130.0       # m : même chose pour un pylône de compression
 const NEZ_D_MIN: float = 8.0            # m : pas plus près du nez (les galets et le lanceur)
@@ -1799,10 +1809,74 @@ func _caler_pylone_nez(i: int, d_nez: float) -> void:
 	_tetes[i] = maxf(y_gare, terrain(d_ok) + hauteur_min)
 
 
+## TSF (retour d'utilisateur, 23/11/2026 : « le premier pylône n'était pas compression mais support et
+## était trop loin, donc un angle fantôme après le départ ») : le câble sort de la gare à l'horizontale ; si la
+## ligne MONTE ensuite (angle creux), c'est un pylône de COMPRESSION collé à la gare qui le tient dessous.
+## Le pylône d'extrémité collé à la gare (moins de NEZ_TSF_CONVERTIR) devient ce pylône-là ; plus loin, on en
+## intercale un à NEZ_TSF_C et le porteur des données reste à sa place, à sa hauteur : il tient la ligne qui monte.
+## Seulement là où l'extrémité avait un pylône de nez (moins de NEZ_PYLONE) : plus loin, la batterie du nez de gare
+## fait déjà le raccord en compression.
+## (Le changer lui-même en compression basse ramenée à 15 m laissait une longue portée en creux sur un sol qui monte :
+## le pylône suivant, relevé pour la garde, prenait jusqu'à 32° de déviation pour 10° admissibles — Rogoney P2.)
+## Avant : ce porteur, devenu pylône de nez, était ramené vers la gare puis relevé pour la garde ; le câble sortait
+## de la gare en montant de 5 à 9° sans un galet.
+const NEZ_TSF_C: float = 15.0
+const NEZ_TSF_CONVERTIR: float = 25.0
+static var compressions_nez_tsf: bool = not "--sans-nez-tsf" in OS.get_cmdline_user_args()   # (bancs : avant / après)
+
+
+func _compressions_nez_tsf(L: float) -> void:
+	if not compressions_nez_tsf or not famille.begins_with("siege_fixe") or pylones.is_empty() \
+			or _tetes.size() != pylones.size():
+		return
+	for aval in [true, false]:
+		var i: int = 0 if aval else pylones.size() - 1
+		var d_nez: float = 0.0 if aval else L
+		if _compression(pylones[i]):
+			continue
+		# (pylône d'extrémité à plus de NEZ_PYLONE : pas de pylône de nez, c'est la batterie de galets du nez de gare
+		# qui fait le raccord, en compression quand la ligne monte — pas d'angle hors des galets)
+		if absf(float(pylones[i]["d"]) - d_nez) >= NEZ_PYLONE:
+			continue
+		var y_gare: float = terrain(d_nez) + H_CABLE_GARE
+		# (sens de la ligne au-delà du nez : le pylône d'extrémité, sauf s'il devient lui-même le pylône de nez, à
+		# hauteur de gare : alors le suivant)
+		var convertir: bool = absf(float(pylones[i]["d"]) - d_nez) < NEZ_TSF_CONVERTIR
+		var k: int = i
+		if convertir and pylones.size() > 1:
+			k = 1 if aval else pylones.size() - 2
+		var dk: float = absf(float(pylones[k]["d"]) - d_nez)
+		if _tetes[k] <= y_gare + maxf(0.5, 0.02 * dk):
+			continue                # (ligne qui descend en quittant la gare : angle saillant, un porteur convient)
+		var d_c: float = NEZ_TSF_C if aval else L - NEZ_TSF_C
+		var compo: Array = [[6, "C"]]
+		if convertir:
+			var p: Dictionary = (pylones[i] as Dictionary).duplicate()
+			p["d"] = minf(float(p["d"]), d_c) if aval else maxf(float(p["d"]), d_c)
+			p["montee"] = compo
+			p["descente"] = compo.duplicate(true)
+			if p.has("x"):
+				p["x"] = decalage_montee(float(p["d"]))
+			pylones[i] = p
+			continue
+		# (k = −1 : pas dans les données ; precalcul_geometrie ne l'écrit pas comme un pylône de croisement)
+		var nv: Dictionary = {"d": d_c, "montee": compo, "descente": compo.duplicate(true), "h": H_CABLE_GARE, "reconstitue": true,
+			"k": -1}
+		if (pylones[0] as Dictionary).has("x"):
+			nv["x"] = decalage_montee(d_c)
+		if aval:
+			pylones.insert(0, nv)
+			_tetes.insert(0, y_gare)
+		else:
+			pylones.append(nv)
+			_tetes.append(y_gare)
+
+
 func _pylones_de_nez(L: float) -> void:
 	_nez_par_pylone = [false, false]
 	if pylones.is_empty() or _tetes.size() != pylones.size():
 		return
+	_compressions_nez_tsf(L)
 	var n: int = pylones.size() - 1
 	# (un pylône de compression en première ou dernière place fait le raccord, même plus loin : c'est lui
 	# le P1 du schéma, la batterie sans numéro à côté décalait la lecture de la ligne)
@@ -7367,6 +7441,7 @@ func regime() -> float:
 
 
 func _regler_vitesse(delta: float) -> void:
+	_avancer_sonnerie(delta)
 	if vitesse_reelle < 0.0:
 		# (arrêtée avant d'être construite — mode réseau, arrêt d'un autre joueur reçu de loin : elle naît arrêtée au
 		# lieu de freiner depuis la pleine vitesse)
@@ -7467,6 +7542,8 @@ func appliquer_etat_reseau(code: int, k: int, cap: float) -> void:
 		regler_cran(k)
 	if e == etat:
 		return
+	if e == "marche" and sonnerie_t >= 0.0:
+		return                      # (notre sonnerie finit, la ligne part avec elle : quelques dixièmes d'écart)
 	if e == "urgence":
 		arret_urgence()
 	elif e == "arret_normal" and etat == "marche":
@@ -7490,18 +7567,45 @@ func vent_ligne() -> float:
 	return _vent_local.length()
 
 
+## Sonnerie de remise en route (retour d'utilisateur, 23/11/2026 : « faire retentir un buzzer dans les deux gares avant
+## la remise en route, audible autour de la gare, qui s'atténue quand on s'éloigne ») : une ligne à l'arrêt ne repart
+## qu'après T_SONNERIE s de sonnerie (SonsRemontees._sonneries la fait entendre aux deux gares). Pas pour les va-et-vient
+## (leurs départs de quai ont leur propre buzzer) ni pour une ligne qui roule encore ou n'est pas construite.
+const T_SONNERIE: float = 5.0
+var sonnerie_t: float = -1.0           # s de sonnerie restantes avant la marche ; < 0 : pas de sonnerie
+
+
 func demarrer() -> void:
 	if etat == "arret" or etat == "arret_normal":
+		if sonnerie_t >= 0.0:
+			return
+		if not vaetvient() and pret and roule and is_processing() and vitesse_reelle <= 0.05:
+			sonnerie_t = T_SONNERIE
+			return
+		etat = "marche"
+
+
+func _avancer_sonnerie(delta: float) -> void:
+	if sonnerie_t < 0.0:
+		return
+	if etat != "arret" and etat != "arret_normal":
+		sonnerie_t = -1.0           # (arrêt d'urgence pendant la sonnerie, ou marche reçue d'un autre joueur)
+		return
+	sonnerie_t -= delta
+	if sonnerie_t <= 0.0:
+		sonnerie_t = -1.0
 		etat = "marche"
 
 
 func arreter() -> void:
+	sonnerie_t = -1.0
 	if etat == "marche":
 		etat = "arret_normal"
 		_exciter_onde(0.06 * vitesse_reelle)
 
 
 func arret_urgence() -> void:
+	sonnerie_t = -1.0
 	if etat != "urgence":
 		_exciter_onde(0.25 * vitesse_reelle)
 	etat = "urgence"

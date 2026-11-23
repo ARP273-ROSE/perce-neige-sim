@@ -68,7 +68,7 @@ func _tick() -> void:
 			var c: String = FileAccess.get_file_as_string(_dos.path_join("code.txt")) \
 				if FileAccess.file_exists(_dos.path_join("code.txt")) else ""
 			if c.length() == 8:
-				_lancer("B", ["--code=" + c, "--sans-noyau"])
+				_lancer("B", ["--code=" + c, "--sans-noyau", "--rame2"])
 				_etape = 2
 		2:
 			var a: Variant = _lire("A.json")
@@ -183,6 +183,11 @@ func _comparer_lignes(a: Dictionary, b: Dictionary, lignes: Array) -> bool:
 			var err: float
 			if n == "perce_neige":
 				err = absf(float(va[1]) - float(vb[1]))
+			elif n == "funival_v":
+				# (vitesse en route seulement : la courbe d'accélération du pilote chez le suiveur)
+				if String(va[0]) != "route" or String(vb[0]) != "route":
+					continue
+				err = absf(float(va[1]) - float(vb[1]))
 			elif va.size() == 4 and va[2] is String:
 				if String(va[2]) != String(vb[2]):
 					err = 99.0
@@ -196,7 +201,7 @@ func _comparer_lignes(a: Dictionary, b: Dictionary, lignes: Array) -> bool:
 			if not ecarts.has(n):
 				ecarts[n] = []
 			(ecarts[n] as Array).append(err)
-	for n2 in ["perce_neige", "funival", "tph_grande_motte", "tsd6_bollin", "tsd6_fresse", "tsd6_grattalu"]:
+	for n2 in ["perce_neige", "funival", "funival_v", "tph_grande_motte", "tsd6_bollin", "tsd6_fresse", "tsd6_grattalu"]:
 		var l: Array = ecarts.get(n2, [])
 		if l.size() < 10:
 			ok = false
@@ -231,4 +236,16 @@ func _comparer_lignes(a: Dictionary, b: Dictionary, lignes: Array) -> bool:
 	lignes.append("arrêt du TPH par B vu par A : %s ; pilote du TPH chez A : %s" % [
 		("après %.1f s" % ((vu_a - kb) * 0.5)) if vu_a >= 0 and kb >= 0 else "NON", "B" if pil == int(b.get("id", -2)) else str(pil)])
 	ok = ok and ok_p
+	# éclairage du tunnel et phares coupés par A (rame 1), vus par B (rame 2) ; même rame : abscisses communes ci-dessus
+	var kd: int = int((a.get("evts", {}) as Dictionary).get("drap_A", -1))
+	var vu_d: int = -1
+	for e5 in lb:
+		var db5: Dictionary = e5[1]
+		if kd >= 0 and int(e5[0]) >= kd and db5.has("perce_neige") and (db5["perce_neige"] as Array).size() >= 4 \
+				and int(db5["perce_neige"][3]) & 5 == 0:
+			vu_d = int(e5[0])
+			break
+	var ok_d: bool = kd >= 0 and vu_d >= 0 and vu_d - kd <= 6
+	lignes.append("tunnel et phares coupés par A vus par B : %s" % (("après %.1f s" % ((vu_d - kd) * 0.5)) if ok_d else "NON"))
+	ok = ok and ok_d
 	return ok

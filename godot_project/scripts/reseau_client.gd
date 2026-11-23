@@ -106,6 +106,15 @@ var _t_corde: float = 0.0
 var _t_file: float = 0.0
 var _files_publiees: bool = false
 var _cordes_mi: Dictionary = {}                 # id → [brin porteur, brin libre]
+## Commandes du funiculaire partagées (retour d'utilisateur, 23/11/2026 : « si l'un éteint les phares ou le tunnel ou
+## toute autre commande, ça doit être synchro chez l'autre ») : phares, éclairage de la cabine, éclairage du tunnel
+## (Main.pn_drapeaux). Chacun publie leur état avec un compteur de changements ; le plus grand l'emporte, l'hôte à
+## égalité (en arrivant, on prend l'état de l'hôte). Pas de pilote : n'importe qui peut éteindre le tunnel.
+const PN_CMD: String = "pn_cmd"
+var _drap: int = -1
+var _drap_seq: int = 0
+var _drap_id: int = -1
+var _drap_t_app: float = -10.0
 
 
 func _init() -> void:
@@ -476,6 +485,7 @@ func _envoyer(delta: float) -> void:
 		_t_vu = 0.1
 		_gestes_locaux()
 		_places_perche()
+		_suivre_drapeaux()
 	_t_lignes -= delta
 	if _t_lignes <= 0.0:
 		_t_lignes = PERIODE_LIGNES
@@ -506,8 +516,10 @@ static func _borne(x: float, b: float) -> float:
 ## État du skieur local, au format du relais (bornes du schéma respectées), ou {} s'il n'y a pas de skieur.
 func etat_local() -> Dictionary:
 	var sk: SkieurJoueur = main.get("skieur") if main != null else null
-	if sk == null or not sk.actif:
+	if sk == null:
 		return {}
+	if not sk.actif:
+		return _etat_range(sk)
 	var p: Vector3 = sk.global_position
 	var cap: float = wrapf(sk._visuel.global_rotation.y if sk._visuel != null else 0.0, -PI, PI)
 	var v: Vector3 = sk.velocity
@@ -538,10 +550,56 @@ func etat_local() -> Dictionary:
 		if rame != null and main.get("physics") != null:
 			var o2: Vector3 = rame.global_transform.affine_inverse() * p
 			e["l"] = PN
-			e["i"] = 0 if rame == main.get("cabin") else 1
-			e["s"] = clampf(float(main.physics.s), 0.0, 99999.0)
+			e["i"] = _rame_commune(rame)
+			e["s"] = clampf(_pn_commun(float(main.physics.s), 0.0, 0)[0], 0.0, 99999.0)
 			e["o"] = [_borne(o2.x, 39.9), _borne(o2.y, 39.9), _borne(o2.z, 39.9)]
 	return e
+
+
+## Rames du funiculaire dans un repère COMMUN au salon (retour d'utilisateur, 23/11/2026 : « suivant qu'on choisit la
+## rame 1 ou 2 à l'écran initial, on monte ensemble mais l'un dans la 1 et l'autre dans la 2 ») : chacun mène SA rame
+## (`cabin`, la 2 si _scenario_rame2), physics.s est l'abscisse de celle-là, l'autre est en MIROIR_S − s. Échangés,
+## abscisse, vitesse, sens et numéro de rame sont ceux de la RAME 1 ; chacun les ramène à la sienne.
+func _rame2() -> bool:
+	return main != null and bool(main.get("_scenario_rame2"))
+
+
+## [s, v, sens] de notre rame ↔ ceux de la rame 1 (la transformation est sa propre inverse).
+func _pn_commun(s: float, v: float, sens: int) -> Array:
+	if not _rame2():
+		return [s, v, sens]
+	return [PNConstants.MIROIR_S - s, -v, -sens]
+
+
+## Numéro commun (0 : rame 1, 1 : rame 2) d'une de nos rames, et l'inverse.
+func _rame_commune(rame: Node3D) -> int:
+	return (0 if rame == main.get("cabin") else 1) ^ (1 if _rame2() else 0)
+
+
+func _rame_locale(i: int) -> Node3D:
+	return main.get("cabin") if (i ^ (1 if _rame2() else 0)) == 0 else main.get("cabin_ghost")
+
+
+## Hors mode skieur (conduite du funiculaire, autre vue), le skieur laissé dans une rame y reste (Main._skieur_voiture) :
+## on continue de le publier à sa place, sinon les autres le voyaient figé dans le tunnel, la rame partie sans lui
+## (retour d'utilisateur, 23/11/2026). Ailleurs, rien : il reste où on l'a laissé, chez les autres aussi.
+func _etat_range(sk: SkieurJoueur) -> Dictionary:
+	var voit: Variant = main.get("_skieur_voiture")
+	if not (voit is Node3D) or not is_instance_valid(voit) or main.get("physics") == null:
+		return {}
+	var rame: Node3D = null
+	for c in [main.get("cabin"), main.get("cabin_ghost")]:
+		if c != null and (c == voit or (c as Node).is_ancestor_of(voit)):
+			rame = c
+	if rame == null:
+		return {}
+	var p: Vector3 = (voit as Node3D).global_transform * (main.get("_skieur_local") as Vector3)
+	var o2: Vector3 = rame.global_transform.affine_inverse() * p
+	var cap: float = wrapf(sk._visuel.global_rotation.y if sk._visuel != null else 0.0, -PI, PI)
+	return {"t": "etat", "p": [_borne(p.x, 39999.0), clampf(p.y, -499.0, 5999.0), _borne(p.z, 39999.0)],
+		"cap": cap, "v": [0.0, 0.0, 0.0], "po": 3, "tc": maintenant(), "l": PN, "i": _rame_commune(rame),
+		"s": clampf(_pn_commun(float(main.physics.s), 0.0, 0)[0], 0.0, 99999.0),
+		"o": [_borne(o2.x, 39.9), _borne(o2.y, 39.9), _borne(o2.z, 39.9)]}
 
 
 ## Ligne à véhicules en boucle calable par la marche du temps (débrayables, pinces fixes, téléskis ; tronçons
@@ -596,10 +654,13 @@ func _lignes_a_publier() -> Array:
 				base[1] = -1.0
 				base[2] = clampf(lg.vitesse_reelle, -39.9, 39.9)
 			out.append(base)
+	if _drap >= 0:
+		out.push_front([PN_CMD, float(_drap_seq), 0.0, 0.0, 0, clampi(_drap, 0, 9), 0.0, []])
 	var ph: Variant = main.get("physics") if main != null else null
 	if ph != null and pilote_de(PN) == mon_id:
-		out.append([PN, clampf(float(ph.s), 0.0, 99999.0), clampf(float(ph.v), -39.9, 39.9), 0.0,
-			3 if bool(ph.emergency) else 0, 0, 1.0, [float(ph.direction), 1.0 if bool(ph.doors_open) else 0.0]])
+		var c: Array = _pn_commun(float(ph.s), float(ph.v), int(ph.direction))
+		out.append([PN, clampf(float(c[0]), 0.0, 99999.0), clampf(float(c[1]), -39.9, 39.9), 0.0,
+			3 if bool(ph.emergency) else 0, 0, 1.0, [float(c[2]), 1.0 if bool(ph.doors_open) else 0.0]])
 	return out
 
 
@@ -613,12 +674,16 @@ func _caler(d: Dictionary, id: int) -> void:
 	var age: float = maintenant() - tc
 	for e in d.get("d", []):
 		var n: String = String(e[0])
+		if n == PN_CMD:
+			_recevoir_drapeaux(id, int(e[1]), int(e[5]))
+			continue
 		if pilote_de(n) != id or (_prise.has(n) and tl - float(_prise[n]) < ATTENTE_PRISE):
 			continue
 		if n == PN:
 			var x0: Array = e[7]
 			if x0.size() >= 2 and main != null:
-				main.set("pn_reseau", {"s": float(e[1]), "v": float(e[2]), "dir": 1 if float(x0[0]) >= 0.0 else -1,
+				var l: Array = _pn_commun(float(e[1]), float(e[2]), 1 if float(x0[0]) >= 0.0 else -1)
+				main.set("pn_reseau", {"s": float(l[0]), "v": float(l[1]), "dir": int(l[2]),
 					"portes": float(x0[1]) > 0.5, "urg": int(e[4]) == 3, "tc": tc})
 				calages += 1
 			continue
@@ -676,6 +741,41 @@ func _caler(d: Dictionary, id: int) -> void:
 				(lg2 as LigneRemontee).facteur_temps = 1.0
 				(lg2 as LigneRemontee).cap_reseau = -1.0
 			_cal_lignes.erase(lg2)
+
+
+func _suivre_drapeaux() -> void:
+	if main == null or not main.has_method("pn_drapeaux"):
+		return
+	var b: int = int(main.call("pn_drapeaux"))
+	if b < 0:
+		return
+	if _drap < 0:
+		_drap = b
+		_drap_id = mon_id
+		return
+	if b == _drap:
+		return
+	# (commande reçue pas encore appliquée — au PC, c'est le simulateur qui la rend : on l'attend)
+	if temps_local() - _drap_t_app < 1.5:
+		return
+	_drap = b
+	_drap_seq += 1
+	_drap_id = mon_id
+
+
+func _prio_drapeaux(id: int) -> int:
+	return 1 << 30 if id == hote_id else -id
+
+
+func _recevoir_drapeaux(id: int, seq: int, b: int) -> void:
+	if seq < _drap_seq or (seq == _drap_seq and _prio_drapeaux(id) <= _prio_drapeaux(_drap_id)):
+		return
+	_drap_seq = seq
+	_drap_id = id
+	if b != _drap and main != null and main.has_method("appliquer_pn_drapeaux"):
+		_drap = b
+		_drap_t_app = temps_local()
+		main.call("appliquer_pn_drapeaux", b)
 
 
 # --- pilotage ---------------------------------------------------------------------------------------------
@@ -839,7 +939,7 @@ func _place_a_bord(id: int, ref: Dictionary, t: float) -> Vector3:
 	var o0: Vector3 = Vector3(ref["o"][0], ref["o"][1], ref["o"][2])
 	if String(ref["l"]) == PN:
 		# (rames du funiculaire calées : la même rame, à la même place)
-		var rame: Node3D = main.get("cabin") if int(ref["i"]) == 0 else main.get("cabin_ghost")
+		var rame: Node3D = _rame_locale(int(ref["i"]))
 		return rame.global_transform * o0 if rame != null else Vector3.INF
 	var lg: LigneRemontee = rd.call("_ligne_nommee", String(ref["l"]))
 	if lg == null or not lg.pret or lg._vehicules.is_empty():
