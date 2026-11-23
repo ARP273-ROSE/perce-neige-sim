@@ -5,6 +5,60 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.6 — 23 novembre 2026
+
+Retours d'un essai à deux (Linux, Windows, iPad) :
+
+- **Funiculaire en réseau, rame 1 ou rame 2** (« suivant qu'on choisit la rame 1 ou 2 à l'écran initial, on monte
+  ensemble mais l'un dans la 1 et l'autre dans la 2 »). Chacun mène sa rame et son abscisse est celle de cette
+  rame : l'état du funiculaire et la place des joueurs à bord partaient tels quels, sans dire de quelle rame il
+  s'agissait. Tout s'échange maintenant dans le repère de la rame 1 (abscisse, vitesse, sens, numéro de rame) et
+  chacun le ramène à la sienne. Le numéro de rame est aussi retenu au PC, où le simulateur l'envoie à la vue 3D.
+- **Skieur laissé dans la rame** (« si l'un quitte le mode skieur pour conduire alors qu'on est tous les deux dedans,
+  il devient immobile dans le tunnel et le funi part sans lui ») : hors mode skieur, le jeu ne publiait plus rien.
+  Le skieur resté à bord est maintenant publié à sa place dans sa rame.
+- **Phares, éclairage de la cabine et du tunnel partagés** (« si l'un éteint les phares ou le tunnel, ça doit être
+  synchro chez l'autre ») : chacun publie l'état de ces trois commandes avec un compteur de changements ; le dernier
+  geste l'emporte, l'hôte départage, et en arrivant dans un salon on prend l'état de l'hôte. N'importe quel joueur
+  peut s'en servir, pas seulement celui qui mène le funiculaire. Au PC, la commande passe par le simulateur
+  (touches H, C, J). Rien à changer au relais : l'état passe dans les messages des remontées.
+- **TSF : pylône de compression à la sortie de la gare** (« le premier pylône n'était pas compression mais support,
+  et trop loin : un angle fantôme après le départ »). Cause : un pylône à moins de 45 m d'une gare devient pylône de
+  nez (le câble sort de la gare à l'horizontale jusqu'à lui, sans batterie de galets) ; sur un sol qui monte, ce
+  porteur était rapproché de la gare puis relevé pour la garde au sol, et le câble quittait la gare en pente de 5 à
+  9° sans un galet (Rogoney, Grand Pré, Cugnaï, Village). Maintenant, quand la ligne monte en quittant la gare, une
+  compression tient le câble à 15 m de la gare, à sa hauteur ; le porteur des données reste à sa place et à sa
+  hauteur (le changer lui-même en compression basse laissait une longue portée en creux : le pylône suivant,
+  relevé pour la garde, prenait jusqu'à 32° de déviation). Un porteur collé à la gare (moins de 25 m) devient la
+  compression. Même règle en haut quand la ligne plonge dans la gare (Cugnaï). Et si un pylône de nez n'a pas pu
+  rester à hauteur de gare, la batterie de galets du nez de gare prend le raccord (arrivée de Rogoney, 5,4°). Lignes
+  au premier pylône plus loin que 45 m (Panoramic, Col des Vés) : inchangées, la batterie de nez, en compression,
+  faisait déjà le raccord. Pylônes allégés de la PWA et lignes lointaines des 11 TSF recuits.
+- **Téléskis : plus de skieurs tirés sur le brin qui redescend** (« des skieurs en descente de TKE et TKD, pas
+  possible de descendre avec ça »). Le brin était reconnu au signe de la position latérale de la perche, qui
+  bascule là où l'axe de la ligne est décalé ou la poulie excentrée (TKD). Il l'est maintenant au sens de marche le
+  long de la boucle.
+- **Sonnerie avant la remise en route** (« un buzzer dans les deux gares avant la remise en route, audible autour de
+  la gare et qui s'atténue en s'éloignant ; au milieu de la ligne on n'entend rien ») : télésièges, télécabines et
+  téléskis à l'arrêt ne repartent qu'après 5 s de sonnerie, au poste comme en redémarrage automatique. Buzzers du
+  Perce-Neige (gare basse, gare haute), joués en 3D aux deux gares, éteints au-delà de 160 m. En réseau, chacun
+  sonne chez lui et la ligne part à la fin de sa propre sonnerie. Les va-et-vient gardent leur buzzer de quai.
+- Funival plus lent à accélérer en réseau : pas reproduit. Le banc réseau mène maintenant un départ du Funival chez
+  l'hôte : chez l'autre joueur, la vitesse suit à 0,01 m/s près (p95) pendant l'accélération, avant comme après
+  cette version. Code inchangé.
+- Vérifié :
+  - `bench_tsf_nez_3d` (nouveau) : les 11 TSF aux deux gares, câble horizontal en sortie de gare avec pylône de nez
+    (compression à 12-15 m en angle creux, ou porteur en angle saillant), sinon batterie de nez ; il échoue sur
+    l'ancien code (pente de sortie 8,7 à 9,5° à Rogoney, Grand Pré, Cugnaï) ;
+  - `bench_profil_lignes_3d` : plus aucune ligne à angle fantôme ; pylônes de mauvais signe 4 au lieu de 5 (le
+    dernier pylône de la Cugnaï est passé en compression) ; « creux » 9 au plus (Village P3 entre, à 0,7°) ;
+  - `bench_teleski_sonnerie_3d` (nouveau) : les 17 TKE et TKD, skieurs tirés tous sur le brin montant (le TKD 3000
+    en avait 4 sur 9 en descente avant) ; départ 5,0 s après l'ordre, buzzer joué à la gare ;
+  - `bench_reseau_rame_rangee_3d` (nouveau) : rame commune et skieur rangé dans chaque rame, rame 1 ou 2 menée ;
+  - `bench_reseau_3d` : B mène la rame 2, A la 1 ; funiculaire calé à 0,00 m (p95) dans le repère commun ; tunnel
+    et phares coupés par A vus par B en 0,5 s ; vitesse du Funival au départ ;
+  - `bench_reseau_commandes_3d` : arrêt puis départ partagés, cabines calées à 0,5 m en 5,4 s avec la sonnerie.
+
 ## 1.76.5 — 22 novembre 2026
 
 - **Rejoindre un salon sans clavier** (« ça ne marche toujours pas le clavier, ni sous PWA Android, ni iPad, ni
