@@ -167,7 +167,7 @@ jobs:
         if: steps.kit.outputs.cibles != ''
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
       - name: Dependances
         if: steps.kit.outputs.cibles != ''
         run: |
@@ -291,7 +291,7 @@ jobs:
       - name: Installer Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       # Controles statiques, quand le depot les embarque. Ils sont facultatifs
       # par construction : un projet qui ne les a pas passe outre sans echouer.
@@ -512,7 +512,7 @@ jobs:
       - name: Python de construction
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       # PyQt6 a besoin de ces bibliotheques pour seulement s'importer sur un
       # runner Linux sans serveur graphique ; sans elles, la verification

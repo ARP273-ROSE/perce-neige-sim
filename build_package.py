@@ -51,7 +51,10 @@ DIST = ROOT / 'dist'
 PKG = DIST / NOM
 CACHE = ROOT / '.build_cache'
 
-PY_VERSION = '3.12.10'
+# 3.12 : plus de distribution Windows embeddable apres 3.12.10, donc plus de
+# correctifs de securite dans le paquet. 3.14 est maintenue avec binaires.
+PY_VERSION = '3.14.10'
+PY_EMBED_SHA256 = '90905e64a840557d8c1bc4f5b74db3d7ee85e3ffb217611cac1c7813acea4159'  # SBOM python.org
 PY_EMBED_URL = (f'https://www.python.org/ftp/python/{PY_VERSION}/'
                 f'python-{PY_VERSION}-embed-amd64.zip')
 # pip posé depuis sa roue : le get-pip.py actuel refuse de s'installer sous Windows
@@ -116,10 +119,26 @@ def fetch(url, dest):
     return dest
 
 
+def verifier_empreinte(chemin, attendue):
+    """Refuse une archive dont l'empreinte n'est pas celle figee ici
+    (telechargement altere, miroir compromis, cache corrompu)."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(chemin, 'rb') as f:
+        for bloc in iter(lambda: f.read(1 << 20), b''):
+            h.update(bloc)
+    if h.hexdigest() != attendue:
+        chemin.unlink(missing_ok=True)
+        raise SystemExit(f'Empreinte inattendue pour {chemin.name} : '
+                         f'{h.hexdigest()} au lieu de {attendue}')
+    log(f'empreinte verifiee : {chemin.name}')
+
+
 def step_python():
     """Deplie la distribution embeddable et lui rend l'acces a site-packages."""
     py_dir = PKG / 'python'
     zip_path = fetch(PY_EMBED_URL, CACHE / f'python-{PY_VERSION}-embed.zip')
+    verifier_empreinte(zip_path, PY_EMBED_SHA256)
     py_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path) as z:
         z.extractall(py_dir)
