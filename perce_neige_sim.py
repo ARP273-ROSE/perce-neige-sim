@@ -7115,13 +7115,13 @@ class AutoOpsLogger:
 def ouvrir_document(quoi: str, langue: str) -> bool:
     """Ouvre un PDF livré avec le programme : « manuel » (manuel-fr.pdf ou
     manuel-en.pdf selon la langue de l'interface, repli sur l'autre) ou
-    « guide » (guide_theorique.pdf). Faux s'il manque."""
+    « guide » (guide_theorique.pdf) ou « rapide » (guide-rapide.pdf). Faux s'il manque."""
     base = _resource_path("")
     try:
         if quoi == "manuel":
             import interface_kit
             return interface_kit.ouvrir_manuel([base], langue, nom="manuel-{langue}.pdf")
-        chemin = base / "guide_theorique.pdf"
+        chemin = base / ("guide-rapide.pdf" if quoi == "rapide" else "guide_theorique.pdf")
         if chemin.is_file():
             return bool(QDesktopServices.openUrl(QUrl.fromLocalFile(str(chemin))))
     except Exception:
@@ -19031,6 +19031,11 @@ class MainWindow(QMainWindow):
         act_pdf = menu.addAction(
             self._tr("Driver's manual, PDF (F6)", "Manuel du conducteur, PDF (F6)"))
         act_pdf.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F6))
+        act_rapide = menu.addAction(
+            self._tr("Quick guide, PDF (French, illustrated)", "Guide rapide, PDF (illustré)"))
+        act_rapide.triggered.connect(
+            lambda: ouvrir_document("rapide", self._lang())
+            or QDesktopServices.openUrl(QUrl(DocsDownloadDialog.REPO_BASE + "/guide-rapide.pdf")))
         act_guide = menu.addAction(
             self._tr("Theory guide, PDF (formulas and sources)",
                      "Guide théorique, PDF (formules et sources)"))

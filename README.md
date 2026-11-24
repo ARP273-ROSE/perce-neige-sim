@@ -289,6 +289,8 @@ skieur (puis ZQSD, `Maj`, `V`, `E` pour chausser).
 
 ## Documentation
 
+- `guide-rapide.pdf` : guide rapide illustré (5 pages) — installer, premier voyage, vue 3D, skieur, réglages
+  pour un ordinateur modeste.
 - `manuel-fr.pdf` / `manuel-en.pdf` : manuel du conducteur, en français et
   en anglais (menu **Aide → Manuel du conducteur**, touche F6).
 - `guide_theorique.pdf` : formules, sources réglementaires, calibration audio.

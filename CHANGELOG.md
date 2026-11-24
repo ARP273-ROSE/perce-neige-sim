@@ -13,6 +13,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
   (« COURIR (Maj) », « POSTE PN (F12) ») ; barre du haut et colonne de la 3D en Liberation Sans grasse, blanc, même
   largeur (236). Nouveau bouton FENÊTRE / PLEIN ÉCRAN (F11, aussi menu Affichage) : la vue 3D reste, hors du plein
   écran, jusqu'au retour au poste (F12). Doublons déjà retirés sur le PC : PUPITRE et MODE CONDUITE de la colonne.
+- **Guide rapide** (`guide-rapide.pdf`, demande d'utilisateur du 24/11/2026 : « refais les captures et un guide
+  rapide d'utilisation, pour config modeste ») : 5 pages illustrées, captures neuves en qualité Basse sans décor HD.
 - Test de la fenêtre mémorisée : Qt ramène la fenêtre à la pleine largeur de l'écran virtuel de la CI (800 au lieu
   de 798).
 
