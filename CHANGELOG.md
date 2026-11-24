@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Prochaine version (non publiée)
+## 1.77.0 — 24 novembre 2026
 
 - **Câbles qui « oscillent » en vue orbitale** (vidéo iPad du 24/11/2026, Olympique 3S : « on avait réglé
   l'oscillation des câbles, c'est revenu ») : mesuré sur la vidéo, le câble montait et descendait de ~50 px à
