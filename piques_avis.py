@@ -598,3 +598,63 @@ SURVITESSE_ARRIVEE = [
     ("Ralentir avant la gare : un usage ancien, mais qui a fait ses preuves.",
      "Slowing down before the station: an old custom, but a proven one."),
 ]
+
+
+# --- Banque du 24/11/2026 (« des phrases sarcastiques pour toutes les phases […] De Funès, Raymond Devos, le planté
+# du bâton, le vin chaud, et le dépanneur qui a dit à distance qu'il ne fallait pas tout démonter ») : pastiches ---
+CRASH += [
+    ("Le butoir n'a pas bougé. Le butoir ne bouge jamais. C'est même à ça qu'on le reconnaît.",
+     "The buffer stop didn't move. It never moves. That's how you recognise it."),
+    ("Au PC, le chef d'exploitation fait « non… non… oh si ». Si.",
+     "In the control room, the boss goes 'no… no… oh yes'. Yes."),
+    ("Le dépanneur, au téléphone : « surtout, ne démontez pas la rame pour voir ». Trop tard, elle s'est démontée toute seule.",
+     "The repairman, on the phone: 'whatever you do, don't take the train apart'. Too late, it did that by itself."),
+    ("Vous vouliez arriver en avance au vin chaud. Vous êtes arrivé dans le mur.",
+     "You wanted to get to the mulled wine early. You got to the wall instead."),
+]
+CRASH_LENT += [
+    ("Un petit choc. Le butoir a à peine froncé le sourcil.",
+     "A little bump. The buffer stop barely raised an eyebrow."),
+]
+CRASH_VIOLENT += [
+    ("Arrivée très, très décidée. Le butoir, lui, était décidé aussi.",
+     "A very, very determined arrival. So was the buffer stop."),
+]
+DERAIL += [
+    ("Déraillement. Un train qui sort des rails, c'est un train qui a voulu voir autre chose.",
+     "Derailed. A train that leaves the rails is a train that wanted to see something else."),
+]
+CABIN += [
+    ("La cabine sent le vin chaud et la crème solaire. Le cocktail des stations.",
+     "The cabin smells of mulled wine and sunscreen. The resort cocktail."),
+    ("Passagers serrés comme des sardines. Des sardines en combinaison de ski.",
+     "Passengers packed like sardines. Sardines in ski suits."),
+]
+REVERSE += [
+    ("Marche arrière. Pour avancer, il faut parfois reculer. Mais pas en tunnel, de préférence.",
+     "Reversing. Sometimes you have to go back to go forward. Preferably not in a tunnel."),
+]
+DOORS_OPEN += [
+    ("Portes ouvertes en roulant. Les courants d'air sont offerts par la maison.",
+     "Doors open while moving. Draughts are on the house."),
+]
+DEPART_SAUVAGE += [
+    ("Départ sans prévenir. Les passagers debout viennent de découvrir l'inertie.",
+     "Departure without warning. Standing passengers have just discovered inertia."),
+]
+SURVITESSE_LIGNE += [
+    ("Survitesse. Le régulateur s'étrangle, comme un gendarme devant un excès de zèle.",
+     "Overspeed. The governor chokes, like a gendarme facing too much enthusiasm."),
+]
+SURVITESSE_ARRIVEE += [
+    ("Trop vite à l'arrivée. Le quai approche plus vite que prévu. Le quai, lui, n'a pas changé de vitesse.",
+     "Too fast at arrival. The platform is coming up quicker than planned. The platform hasn't sped up."),
+]
+SKIEUR_HORS_PISTE += [
+    ("Hors piste. Le planté de bâton dans la poudreuse : 1 m de bâton, 1 m de bras, 1 m de regret.",
+     "Off-piste. A pole plant in the powder: 1 m of pole, 1 m of arm, 1 m of regret."),
+]
+SKIEUR_RATE += [
+    ("Raté. Le funiculaire part à l'heure. C'est d'ailleurs ce qu'on lui reproche.",
+     "Missed it. The funicular leaves on time. That's actually what people complain about."),
+]

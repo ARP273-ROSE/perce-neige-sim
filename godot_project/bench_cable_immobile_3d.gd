@@ -1,8 +1,11 @@
 ## Banc du câble immobile en marche établie (retours d'utilisateur des 19 et 20/11/2026 : « oscillation verticale de
 ## 1 Hz de tous les câbles ») : flèche dessinée (LigneRemontee._fleche, même calcul que le nuanceur ; noyau C++ :
 ## fleche_en) en trois points fixes de portée, deux brins, 20 s à vitesse nominale, sur un TSD, une TCD, un TSF, le
-## 3S et un téléphérique. Monocâbles : amplitude ≤ 1 cm. 3S et téléphérique (porteurs creusés sous chaque cabine,
-## lentement) : composante rapide (au-dessus de 0,5 Hz) ≤ 1 cm. NOYAU=1 : avec le module C++.
+## 3S et un téléphérique. 3S et téléphérique (porteurs creusés sous chaque cabine, lentement) : composante rapide
+## (au-dessus de 0,5 Hz) ≤ 1 cm. Monocâbles : depuis le 24/11/2026 (« physique parfaite » : chaque véhicule casse le
+## câble de son poids réel), le câble monte et descend au passage des véhicules — l'amplitude doit être PHYSIQUE :
+## non nulle (≥ 5 mm) et dans l'enveloppe P·e/8H (charges égales) + ΔP·x(L−x)/(L·H) (un véhicule plein au lieu d'un
+## vide), + 2 cm (audit_physique/physique_cables.sage). NOYAU=1 : avec le module C++.
 extends SceneTree
 var _main: Node = null
 var _f: int = 0
@@ -103,7 +106,15 @@ func _tick() -> void:
 		fh.close()
 	var lent: bool = _lg.tricable() or _lg.vaetvient()
 	var pire: float = 0.0
+	var marge: float = 0.0          # monocâbles : écart à l'enveloppe physique (≤ 0 attendu)
+	var plus_petite: float = INF
+	var g: float = 9.81
+	var p_vide: float = _lg.masse_vehicule() * g
+	var p_plein: float = (_lg.masse_vehicule() + OccupationRemontees.PAX_KG * _lg.places_vehicule()) * g
+	var h: float = _lg._tension
+	var iq: int = -1
 	for sr in _series:
+		iq += 1
 		var a: Array = sr
 		var amp: float = 0.0
 		if lent:
@@ -130,10 +141,23 @@ func _tick() -> void:
 				lo = minf(lo, x)
 				hi = maxf(hi, x)
 			amp = hi - lo
+			var dq: float = float(_pts[iq / 2])
+			var ip: int = _lg._portee_de(dq)
+			var x1: float = _lg._appuis[ip]
+			var x2: float = _lg._appuis[ip + 1]
+			var env: float = p_plein * maxf(_lg.espacement, 8.0) / (8.0 * h) + (p_plein - p_vide) * (dq - x1) * (x2 - dq) / ((x2 - x1) * h) + 0.02
+			marge = maxf(marge, amp - env)
+			# (mouvement exigé dans la zone détaillée autour du point de vue seulement : au-delà, poids moyen)
+			if x1 >= _lg._zone_loc.x - 1e-3 and x2 <= _lg._zone_loc.y + 1e-3:
+				plus_petite = minf(plus_petite, amp)
 		pire = maxf(pire, amp)
-	var ok1: bool = pire <= 0.01
+	var ok1: bool = pire <= 0.01 if lent else (marge <= 0.0 and plus_petite >= 0.005 and plus_petite < INF)
 	if not ok1:
 		_echecs += 1
-	_bilan.append("%s %s : %s %.4f m (seuil 0,01)" % ["[OK]  " if ok1 else "[ECHEC]", _lg.name, "aller-retour rapide" if lent else "amplitude", pire])
+	if lent:
+		_bilan.append("%s %s : aller-retour rapide %.4f m (seuil 0,01)" % ["[OK]  " if ok1 else "[ECHEC]", _lg.name, pire])
+	else:
+		_bilan.append("%s %s : amplitude %.3f m (mini %.3f, ≥ 0,005), dépassement de l'enveloppe physique %.3f m (≤ 0)" % [
+			"[OK]  " if ok1 else "[ECHEC]", _lg.name, pire, plus_petite, marge])
 	_k += 1
 	_att = 0

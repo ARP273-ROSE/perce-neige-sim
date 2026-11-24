@@ -142,6 +142,9 @@ public:
 	void set_vehicules(const Array &p_vehicules, const Array &p_pinces, const Array &p_susps, const Array &p_corps,
 			const PackedFloat64Array &s, const PackedFloat32Array &p_phi, const PackedFloat32Array &p_psi);
 	void set_charges(const PackedFloat32Array &p_tires);
+	// sièges sans bulle, vides sur leur brin du moment : garde-corps relevé (ce sont les passagers qui le baissent)
+	PackedByteArray sieges_vides;
+	void set_sieges_vides(const PackedByteArray &p) { sieges_vides = p; }
 	void set_charge_joueur(int i, double p_psi0) {
 		i_joueur = i;
 		psi0_joueur = p_psi0;

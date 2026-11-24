@@ -5978,6 +5978,7 @@ func _process_corps(delta: float) -> void:
 	_maj_vent()
 	_maj_occupation(delta)
 	_maj_poids_vehicules(delta)
+	_maj_sieges_vides(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	_regler_vitesse(delta)
@@ -7208,8 +7209,16 @@ func charges_ponctuelles_actives() -> bool:
 ## elles montait et descendait à chaque passage de véhicule, ~1 Hz à la vitesse de ligne. Le code reste, éteint ici
 ## (le noyau C++ reçoit l'indicateur par le dictionnaire de la ligne, « zone_locale ») ; l'onde d'arrêt d'urgence
 ## (_exciter_onde) reste.
+##
+## RALLUMÉE le 24/11/2026 (retour d'utilisateur : « la cassure sous le poids d'une cabine ou d'un siège, selon son
+## poids réel et la tension, me paraît faible, surtout la différence chargé / vide » ; « physique parfaite ») : sans
+## elle, chaque véhicule portait le poids MOYEN de son brin. Calcul SageMath (physique_cables.sage, H = 300 kN) :
+## cassure P/H de 1,2° (siège de 6 vide) à 2,1° (plein), 1,6° à 3,1° pour une cabine de 10 ; la montée-descente en
+## un point fixe au passage des véhicules (corde contre parabole, P·e/8H) est de 3 à 20 cm — physique, et non un
+## défaut. Monocâbles seulement : le 3S et les téléphériques ont leurs propres charges ponctuelles (cabine par
+## cabine), les téléskis gardent le poids réparti.
 func zone_locale() -> bool:
-	return false
+	return not (tricable() or vaetvient() or teleski())
 
 
 var _w_ref: Array = [0.0, 0.0]         # charge de référence des véhicules / H (1/m), géométrie précalculée
@@ -7241,6 +7250,26 @@ func _maj_poids_vehicules(delta: float) -> void:
 		var montee: bool = signf(pc.x) == xm
 		p[i] = (m_v + OccupationRemontees.PAX_KG * passagers(i, montee)) * 9.81 / _tension
 	_noyau.set_poids_vehicules(p)
+
+
+## Sièges sans bulle vides sur leur brin du moment, pour le noyau C++ (garde-corps relevé) : 5 fois par seconde
+## (le changement de brin se fait sur la poulie, garde-corps déjà relevé).
+var _vides_t: float = 99.0
+func _maj_sieges_vides(delta: float) -> void:
+	_vides_t += delta
+	if _vides_t < 0.2 or _noyau == null or teleski() or _vehicules.is_empty() or not _noyau.has_method("set_sieges_vides"):
+		return
+	_vides_t = 0.0
+	var v0: VehiculeRemontee = _vehicules[0][0]
+	if v0 == null or v0.cabine or v0._bulle != null:
+		return
+	var xm: float = signf(_x_brin(true))
+	var o: PackedByteArray = PackedByteArray()
+	o.resize(_vehicules.size())
+	for i in range(_vehicules.size()):
+		var pc: Vector3 = _point_cable(float(_vehicules[i][1]))[0]
+		o[i] = 1 if passagers(i, signf(pc.x) == xm) == 0 else 0
+	_noyau.set_sieges_vides(o)
 
 
 ## Charges du moment : chaque véhicule en ligne, sur son brin.
@@ -8042,6 +8071,10 @@ func _placer(i: int) -> void:
 		gc = 1.0 - clampf((x - x_haut) / 2.0, 0.0, 1.0) * clampf((x_bas - x) / 2.0, 0.0, 1.0)
 		if traverse(i) and ((role == "bas" and z[0] == "gare_amont") or (role == "haut" and z[0] == "gare_aval")):
 			gc = 1.0              # il traverse la gare intermédiaire sans s'arrêter
+	# siège sans bulle : ce sont les passagers qui baissent le garde-corps — un siège vide monte et redescend
+	# garde-corps relevé (retour d'utilisateur du 24/11/2026 ; sièges à bulle inchangés : la bulle est automatique)
+	if not v.cabine and v._bulle == null and not teleski() and is_nan(v.psi0_joueur) and passagers(i, montee_v) == 0:
+		gc = 0.0
 	v.ouvrir_pince(ouverture)
 	v.garde_corps(gc)
 	v.bulle(gc)

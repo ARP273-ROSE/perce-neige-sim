@@ -1,5 +1,6 @@
 class_name PiquesRemontees
 extends Object
+const _BONUS = preload("res://scripts/piques_bonus.gd")
 ## Piques sarcastiques des remontées (retour d'utilisateur, 25/10/2026 : « une grosse
 ## liste de messages sarcastiques adaptés à chaque type de remontée, quand on
 ## s'arrête au milieu, qu'on coupe le chemin sans valider le forfait, qu'on
@@ -589,6 +590,9 @@ static func _liste(evt: String, fam: String) -> Array:
 	var cle: String = evt + "_" + fam.to_upper()
 	if c.has(cle):
 		l.append_array(c[cle])
+	# banque supplémentaire (24/11/2026)
+	l.append_array(_BONUS.liste(evt + "_COMMUN"))
+	l.append_array(_BONUS.liste(cle))
 	return l
 
 

@@ -159,7 +159,7 @@ const VARIANTES: int = 8
 static var _numeros: Dictionary = {}      # type → numéros des variantes
 static var _modeles: Dictionary = {}      # type|numéro → [Node3D hors arbre, références, valeurs]
 const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras", "_assiette"]
-const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges", "_coulisses", "_demi_chariots"]
+const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges", "_coulisses", "_demi_chariots", "_paires_tph"]
 const VALEURS: Array = ["places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
 
 
@@ -308,6 +308,7 @@ func _fabriquer_pince() -> void:
 	_ressorts.clear()
 	_galets_roul.clear()
 	_demi_chariots.clear()
+	_paires_tph.clear()
 	_portes.clear()
 	_skis_ranges.clear()
 	_etat_anim = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])
@@ -376,6 +377,8 @@ func _a_garder() -> Array:
 		garder.append(g)
 	for dc in _demi_chariots:
 		garder.append(dc)
+	for pt in _paires_tph:
+		garder.append(pt)
 	for p in _portes:
 		garder.append(p[0])
 	# perche télescopique du TKD : chaque élément coulisse dans le précédent, l'assiette au bout
@@ -1608,11 +1611,14 @@ func _garde_corps_bmf(siege: Node3D, W: float, m: String, xe: float) -> void:
 
 ## 0 : relevé (au-dessus des têtes) ; 1 : baissé.
 func garde_corps(t: float) -> void:
-	if t == _etat_anim[1]:
+	# (cache comparé à l'angle réel : un siège copié d'un modèle pouvait garder un cache « relevé » avec la pièce
+	# baissée, et ne plus jamais la relever — sièges vides garde-corps relevé, 24/11/2026)
+	var a: float = lerpf(_gc_releve, 0.0, clampf(t, 0.0, 1.0))
+	if t == _etat_anim[1] and (_gc == null or absf(_gc.rotation.x - a) < 1e-4):
 		return
 	_etat_anim[1] = t
 	if _gc != null:
-		_gc.rotation.x = lerpf(_gc_releve, 0.0, clampf(t, 0.0, 1.0))
+		_gc.rotation.x = a
 
 
 ## Bulle des Lanches (sièges Études de Transports, pinces ET-106), refaite
@@ -2206,6 +2212,35 @@ func _suspente_tph(hs: float, m: String, m_chariot: String, zp: float, courbe: b
 		RemonteeKit.barre(self, q - o3, q + o3, 0.013, m, 6)
 
 
+## Téléphérique : paires de galets sur leur balancier, articulées une à une (retour d'utilisateur du 24/11/2026 :
+## « le chariot doit suivre l'arrondi du câble, les galets sont deux à deux, comme aux pylônes »). Sous une cabine
+## pleine le porteur décrit un arc de ~35 m de rayon sur la longueur du chariot (calcul SageMath du 24/11/2026,
+## physique_cables.sage) : chaque balancier se pose sur le porteur, ses deux galets en appui.
+## Origine du nœud : sur l'axe du porteur, au milieu de la paire ; méta "x", "z" (place nominale), "e" (demi-écart
+## des galets).
+var _paires_tph: Array = []
+
+
+func _paire_tph(ch: Node3D, x: float, z: float, e: float) -> Node3D:
+	var n: Node3D = Node3D.new()
+	n.name = "PaireGalets"
+	n.position = Vector3(x, 0, z)
+	n.set_meta("x", x)
+	n.set_meta("z", z)
+	n.set_meta("e", e)
+	ch.add_child(n)
+	_paires_tph.append(n)
+	return n
+
+
+## Pose des balanciers (repère du chariot) ; vide = chariot droit.
+func articuler_paires_tph(poses: Array) -> void:
+	if poses.size() != _paires_tph.size():
+		return
+	for k in range(poses.size()):
+		(_paires_tph[k] as Node3D).transform = poses[k]
+
+
 func _cabine_tph() -> void:
 	pivot = Vector3(0, 0.0, 0)
 	var ch: Node3D = Node3D.new()
@@ -2234,20 +2269,22 @@ func _cabine_tph() -> void:
 			var n_pf: int = n_g / 2
 			for kpf in range(n_pf):
 				var zpf: float = (kpf - (n_pf - 1) * 0.5) * 0.84
+				var pf: Node3D = _paire_tph(ch, sx * xr, zpf, 0.42)
 				for sjf in [-1.0, 1.0]:
-					RemonteeKit.galet(ch, Vector3(sx * xr, rg + PyloneRemontee.R_CABLE, zpf + sjf * 0.21), rg)
+					RemonteeKit.galet(pf, Vector3(0, rg + PyloneRemontee.R_CABLE, sjf * 0.21), rg)
 				for sfl in [-1.0, 1.0]:
-					RemonteeKit.boite_en(ch, Vector3(0.03, 0.20, 0.74), Vector3(sx * xr + sfl * 0.10, rg + PyloneRemontee.R_CABLE, zpf), "cabine_rouge")
-				RemonteeKit.cylindre(ch, 0.07, 0.07, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * xr, rg + PyloneRemontee.R_CABLE + 0.02, zpf)), "acier", 10)
+					RemonteeKit.boite_en(pf, Vector3(0.03, 0.20, 0.74), Vector3(sfl * 0.10, rg + PyloneRemontee.R_CABLE, 0), "cabine_rouge")
+				RemonteeKit.cylindre(pf, 0.07, 0.07, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, rg + PyloneRemontee.R_CABLE + 0.02, 0)), "acier", 10)
 		else:
 			var n_p: int = n_g / 2
 			for kp in range(n_p):
 				var zp0: float = (kp - (n_p - 1) * 0.5) * 0.74
+				var pg: Node3D = _paire_tph(ch, sx * xr, zp0, 0.37)
 				for sj2 in [-1.0, 1.0]:
-					RemonteeKit.galet(ch, Vector3(sx * xr, rg + PyloneRemontee.R_CABLE, zp0 + sj2 * 0.185), rg)
+					RemonteeKit.galet(pg, Vector3(0, rg + PyloneRemontee.R_CABLE, sj2 * 0.185), rg)
 				# balancier de la paire, et son axe sur le longeron
-				RemonteeKit.boite_en(ch, Vector3(0.26, 0.10, 0.56), Vector3(sx * xr, rg + PyloneRemontee.R_CABLE + rg + 0.08, zp0), gris)
-				RemonteeKit.cylindre(ch, 0.05, 0.05, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * xr, rg + 0.34, zp0)), "acier_noir", 8)
+				RemonteeKit.boite_en(pg, Vector3(0.26, 0.10, 0.56), Vector3(0, rg + PyloneRemontee.R_CABLE + rg + 0.08, 0), gris)
+				RemonteeKit.cylindre(pg, 0.05, 0.05, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, rg + 0.34, 0)), "acier_noir", 8)
 			# (pas de longeron au-dessus des balanciers : il n'existe pas, retour d'utilisateur du 18/11/2026)
 		# frein de chariot : mâchoires sur le porteur, en amont
 		RemonteeKit.boite_en(ch, Vector3(0.36, 0.30, 0.55), Vector3(sx * xr, rg * 0.5, -lr * 0.5 - 0.30), "peinture_anthracite")

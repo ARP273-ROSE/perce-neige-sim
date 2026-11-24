@@ -195,6 +195,7 @@ void NoyauRemontee::_bind_methods() {
 			&NoyauRemontee::set_vehicules);
 	ClassDB::bind_method(D_METHOD("set_charges", "tires"), &NoyauRemontee::set_charges);
 	ClassDB::bind_method(D_METHOD("set_charge_joueur", "i", "psi0"), &NoyauRemontee::set_charge_joueur);
+	ClassDB::bind_method(D_METHOD("set_sieges_vides", "vides"), &NoyauRemontee::set_sieges_vides);
 	ClassDB::bind_method(D_METHOD("set_vent", "vent", "k_aire"), &NoyauRemontee::set_vent);
 	ClassDB::bind_method(D_METHOD("set_vitesse", "vitesse"), &NoyauRemontee::set_vitesse);
 	ClassDB::bind_method(D_METHOD("set_temps", "tab_s"), &NoyauRemontee::set_temps);
@@ -862,6 +863,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			if (cabine) {
 				porte = (float)std::clamp((std::min(z.x, z.l - z.x) - l_frein) / 2.0, 0.0, 1.0);
 			}
+		}
+		if ((int64_t)i < sieges_vides.size() && sieges_vides[i] != 0 && (int)i != i_joueur) {
+			gc = 0.0f;
 		}
 		const double t0c = maintenant_us();
 		if (ouv != e_ouv[i]) {

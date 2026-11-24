@@ -1,0 +1,23 @@
+=== A. Monocâbles (câble Ø47, H = 300 kN) ===
+rupture estimée 2890 kN, coef. sécurité à 330 kN : 8.8
+TSD6 siège    vide  P=  6.4 kN  cassure 1.22°  bosse entre véhicules 3.2 cm
+TSD6 siège    plein P= 11.1 kN  cassure 2.12°  bosse entre véhicules 5.5 cm
+TCD10 cabine  vide  P=  8.3 kN  cassure 1.59°  bosse entre véhicules 10.4 cm
+TCD10 cabine  plein P= 16.2 kN  cassure 3.09°  bosse entre véhicules 20.2 cm
+
+=== B. Téléphériques (charge sur la voie : 2 porteurs) ===
+Grande Motte vide   P=  60.8 kN cassure 2.68°  R= 87.0 m  arc sous le chariot 2.4 cm  paire de bout 1.10°
+Grande Motte pleine P= 151.1 kN cassure 6.66°  R= 35.0 m  arc sous le chariot 5.9 cm  paire de bout 2.72°
+Fornet       vide   P=  54.9 kN cassure 2.86°  R= 92.5 m  arc sous le chariot 2.9 cm  paire de bout 1.17°
+Fornet       pleine P= 117.7 kN cassure 6.13°  R= 43.2 m  arc sous le chariot 6.2 cm  paire de bout 2.51°
+Fornet : contrepoids 4×108 t → si moufle 2:1, T porteur = 530 kN, voie = 1.06 MN ; porteur Ø44 clos rupture ≈ 2029 kN → coef 3.8
+
+=== C. 3S Olympique (2 porteurs Ø57, rupture 3789 kN chacun, H voie 1.1 MN) ===
+vide   P=28.9 kN cassure 1.51°  R=84 m  arc sous chariot 0.7 cm ; coef sécurité porteurs 6.9
+pleine P=52.5 kN cassure 2.73°  R=46 m  arc sous chariot 1.3 cm ; coef sécurité porteurs 6.9
+
+=== D. Pendule ===
+télécabine L=3.00 m T=3.47 s ζ=0.106 amplitude /2 en 4 s (littérature télécabine ζ≈0,0035 → 110 s)
+3S         L=4.36 m T=4.19 s ζ=0.031 amplitude /2 en 15 s (littérature télécabine ζ≈0,0035 → 132 s)
+TPH GM     L=7.00 m T=5.31 s ζ=0.015 amplitude /2 en 40 s (littérature télécabine ζ≈0,0035 → 167 s)
+lanceur 3S a=1.8 m/s² : inclinaison d'équilibre 10.4°, lâché d'un coup → amplitude 10.4°

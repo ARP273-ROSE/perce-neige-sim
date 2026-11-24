@@ -7,6 +7,42 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Prochaine version (non publiée)
 
+- **Garde-corps des sièges vides relevé** (retour d'utilisateur du 24/11/2026 : « sur les TSD sans bulle et les TSF,
+  ce sont les usagers qui ferment le garde-corps ; les sièges vides montent et descendent garde-corps ouvert »). Siège
+  sans bulle et sans passager (ni le joueur) : garde-corps relevé tout le tour ; siège occupé : baissé en ligne comme
+  avant ; sièges à bulle inchangés. GDScript et module C++ (set_sieges_vides). Corrigé au passage : un siège copié d'un
+  modèle pouvait garder en cache un garde-corps « relevé » alors que la pièce était baissée, et ne plus le bouger.
+- **Piques d'exploitation seulement si l'on est concerné** (« j'ai des phrases d'arrêt de remontée alors que je ne
+  suis pas dessus ni en gare, je skie juste à côté ») : pannes, reprises, secours… piquaient le skieur dès qu'il était
+  à 400 m d'une gare (ligne suivie). Il faut maintenant être à bord, ou dans la gare ou sa file (40 m).
+- **Nouvelles piques pour toutes les phases** (« réseau ou pas, les pannes et tout le reste ; De Funès, Raymond Devos,
+  le planté du bâton, le vin chaud, et le dépanneur qui a dit à distance qu'il ne fallait pas tout démonter ») :
+  banque scripts/piques_bonus.gd (arrêts, resquille, embarquement, arrivée, pannes, reprise, secours, dépannage,
+  évacuation, corde, réseau, nuit), et piques du funiculaire dans piques_avis.py (PC et PWA). Pastiches, pas de
+  citations.
+- Bancs bench_cable_immobile (GDScript et C++) : le câble des monocâbles bouge désormais au passage des véhicules ; le
+  banc exige un mouvement physique (non nul près du point de vue, dans l'enveloppe P·e/8H + ΔP·x(L−x)/(L·H)) au lieu
+  d'un câble immobile. Mesuré : 24 cm (TSD Grattalu), 68 cm (TCD Daille, cabines espacées de ~100 m), 22 cm (TSF).
+
+- **Câble cassé sous chaque véhicule selon son poids réel** (retour d'utilisateur du 24/11/2026 : « la cassure sous
+  le poids d'une cabine, d'un siège, selon le poids réel et la tension, me paraît faible, surtout la différence
+  chargé / vide » ; « physique parfaite, recherches et calculs SageMath »). Sur les télésièges et télécabines, chaque
+  véhicule portait depuis le 19/11 le poids MOYEN de son brin : même cassure pour un siège plein ou vide. Le poids
+  réel de chacun (passagers dessinés compris) est rétabli. Calcul (audit_physique/physique_cables.sage, H = 300 kN) :
+  cassure de 1,2° (siège de 6 vide) à 2,1° (plein), de 1,6° à 3,1° pour une cabine de 10. En un point fixe, le câble
+  monte et redescend de 3 à 20 cm au passage de chaque véhicule : c'est la physique, pas un défaut.
+- **Chariot des téléphériques articulé** (même retour : « le chariot doit suivre l'arrondi du câble, il est rigide ;
+  les galets sont deux à deux comme aux pylônes »). Les 6 paires de galets de chaque porteur sont sur leur balancier
+  et se posent une à une sur le porteur. Le poids de la cabine passe par les balanciers (une charge égale par paire)
+  au lieu d'un seul point au milieu : sous une cabine pleine, le porteur décrit un arc de ~35 m de rayon (6 cm de
+  flèche sur le chariot). Paires de bout inclinées de ±2,1° sous 94 passagers à la Grande Motte, ±0,75° à vide
+  (calcul : 2,5° et 0,9°), arrondi inversé au passage du sabot du pylône. Porteurs dessinés avec un sommet par mètre
+  (5 m avant : la carte graphique tirait l'arc en ligne droite ; écart au vrai câble < 5 mm).
+- Vérifications de la physique : tension du Fornet confirmée par ses contrepoids (4 × 108 t sur moufle : 1,06 MN par
+  voie, modèle 1,1 MN calé sur les traces GPS) ; 3S Olympique (porteurs de 57 mm, rupture 3 789 kN ; cabine 2 950 kg
+  à vide, 5 350 kg pleine) conforme. Balancement : amortissement relevé dans la littérature ζ ≈ 0,0035 pour une
+  télécabine, plus faible encore que le modèle (0,03 à 0,1) — le balancement qui dure est physique.
+
 - **PWA : barre du haut qui se chevauchait sur iPad** (capture iPad du 24/11/2026 : « les boutons sont trop gros et
   se chevauchent »). Plus longue depuis les noms clarifiés de la 1.77.0, elle passait sous PANNE sur un écran 4:3, et
   MODE SKIEUR sur deux lignes la faisait descendre sur le panneau de la salle des machines. MODE SKIEUR tient sur une

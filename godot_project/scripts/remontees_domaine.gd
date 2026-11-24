@@ -1298,11 +1298,24 @@ static func vitesse_ligne(lg: LigneRemontee) -> float:
 const DEUX_SENS: Array = ["tsd6_leissieres"]
 
 
+static func _evt_exploitation(evt: String) -> bool:
+	return evt.begins_with("PANNE_") or evt in ["REPRISE", "SECOURS", "REMISE", "DEPANNAGE", "REFUS"]
+
+
 func _piquer(evt: String, lg: LigneRemontee) -> void:
 	if not is_instance_valid(lg):
 		return
 	if evt == "DESCENTE" and String(lg.name) in DEUX_SENS:
 		return
+	# pannes et exploitation (pique de la ligne suivie) : seulement si l'on est concerné — à bord, ou dans sa gare
+	# ou sa file (40 m) ; la ligne suivie est la plus proche à 400 m, et ses arrêts piquaient le skieur qui passait
+	# à côté (retour d'utilisateur du 24/11/2026)
+	if _evt_exploitation(evt):
+		var concerne: bool = not a_bord.is_empty() and a_bord[0] == lg
+		if not concerne and skieur != null:
+			concerne = _pres_des_gares(lg, skieur.global_position, 40.0)
+		if not concerne:
+			return
 	# resquille : la file d'attente proteste (« whouuu »)
 	if evt == "FRAUDE" and sons != null:
 		sons._coup(lg, "file_huees")

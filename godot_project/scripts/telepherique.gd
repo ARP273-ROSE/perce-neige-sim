@@ -750,6 +750,44 @@ func _v_profil(d: float, pr: Dictionary) -> float:
 	return float(pts[pts.size() - 1][1])
 
 
+## Abscisses (repère du chariot, m) des paires de galets d'une rangée : 6 paires, au pas de 0,84 m au Fornet,
+## 0,74 m à la Grande Motte (VehiculeRemontee._cabine_tph).
+func _z_paires() -> Array:
+	var pas: float = 0.84 if String(name) == "tph_fornet" else 0.74
+	var o: Array = []
+	for k in range(6):
+		o.append((k - 2.5) * pas)
+	return o
+
+
+## Porteur TEL QU'IL EST DESSINÉ en d : segment droit entre deux sommets (tous les mètres, d entiers) ; les galets
+## roulent sur ce segment-là.
+func _y_porteur_dessine(d: float, montee: bool) -> float:
+	var a: float = floorf(d)
+	return lerpf(_y_chariot(a, montee), _y_chariot(a + 1.0, montee), d - a)
+
+
+## Chaque balancier se pose sur le porteur dessiné, ses deux galets en appui (repère du chariot).
+func _poser_paires(v: VehiculeRemontee, d: float, montee: bool, x0: float) -> void:
+	if v._pince == null or v._paires_tph.is_empty() or not _corps_proche:
+		return
+	var inv: Transform3D = (v.transform * v._pince.transform).affine_inverse()
+	var c0: float = _cos_voie(d, montee)
+	var poses: Array = []
+	for n in v._paires_tph:
+		var nx: float = float((n as Node3D).get_meta("x"))
+		var nz: float = float((n as Node3D).get_meta("z"))
+		var e: float = float((n as Node3D).get_meta("e"))
+		var dk: float = d - nz * c0
+		var pa: Vector3 = inv * Vector3(x0, _y_porteur_dessine(dk + e * c0, montee), -(dk + e * c0))
+		var pb: Vector3 = inv * Vector3(x0, _y_porteur_dessine(dk - e * c0, montee), -(dk - e * c0))
+		var f: Vector3 = Vector3(0.0, pb.y - pa.y, pb.z - pa.z).normalized()     # vers +z (l'aval du chariot)
+		var o: Vector3 = (pa + pb) * 0.5
+		o.x = nx
+		poses.append(Transform3D(Basis(Vector3.RIGHT, f.cross(Vector3.RIGHT), f), o))
+	v.articuler_paires_tph(poses)
+
+
 ## Hauteur du chariot (le porteur, sous la charge) en d sur une voie.
 func _y_chariot(d: float, montee: bool) -> float:
 	var L: float = longueur_h()
@@ -765,11 +803,23 @@ func _placer(i: int) -> void:
 	var d: float = _vehicules[i][1]
 	var montee: bool = i == 0
 	var x: float = _x_brin(montee)
-	var p: Vector3 = Vector3(x, _y_chariot(d, montee), -d)
+	# chariot : sur ses balanciers, posés sur le porteur DESSINÉ (sommets tous les mètres) — hauteur moyenne des
+	# paires, pente de la corde des paires de bout
+	var zs: Array = _z_paires()
+	var c0: float = _cos_voie(d, montee)
+	var y_m: float = 0.0
+	for z in zs:
+		y_m += _y_porteur_dessine(d - float(z) * c0, montee)
+	y_m /= float(zs.size())
+	var z_bout: float = float(zs[zs.size() - 1])
+	var ya: float = _y_porteur_dessine(d - z_bout * c0, montee)
+	var yb: float = _y_porteur_dessine(d + z_bout * c0, montee)
+	var p: Vector3 = Vector3(x, y_m, -d)
 	var b: Basis = Basis.looking_at(Vector3.FORWARD, Vector3.UP)
 	v.transform = Transform3D(b, p)
-	var pente: float = atan2(_y_chariot(d + 2.0, montee) - _y_chariot(d - 2.0, montee), 4.0)
+	var pente: float = atan2(yb - ya, 2.0 * z_bout * c0)
 	v.inclinaison(pente)
+	_poser_paires(v, d, montee, x)
 	if _dt > 0.0:
 		var m0: float = v.masse
 		v.masse = m0 + OccupationRemontees.PAX_KG * passagers_cabine(i)
@@ -979,7 +1029,12 @@ func _charges_ponctuelles() -> void:
 		var d: float = _vehicules[i][1]
 		# sur un sabot, la cabine est portée par le sabot : pas de flèche (ni pour le chariot ni pour le câble)
 		if d > 0.0 and d < longueur_h() and not portee_sur_sabot(_portee_de(d)):
-			listes[i].append(Vector2(d, poids_cabine(i) / _tension))
+			# le poids passe par les balanciers : une charge égale par paire de galets (isostatique), et non un
+			# seul point au milieu du chariot — le porteur s'arrondit sous le chariot au lieu de casser en V
+			var zs: Array = _z_paires()
+			var c0: float = _cos_voie(d, i == 0)
+			for z in zs:
+				listes[i].append(Vector2(d - float(z) * c0, poids_cabine(i) / _tension / float(zs.size())))
 	_charges = listes
 	# même flèche pour le chariot (_fleche) que pour le câble dessiné (nuanceur) : les cabines flottaient
 	# jusqu'à 24 m au-dessus des porteurs à mi-portée (retour d'utilisateur, 11/11/2026)
@@ -997,7 +1052,8 @@ func _charges_ponctuelles() -> void:
 		var l2: Array = listes[k]
 		for j in range(32):
 			var q: Vector2 = l2[j * 2] if j * 2 < l2.size() else Vector2.ZERO
-			packs.append(Vector4(q.x, q.y, 0.0, 0.0))
+			var q2: Vector2 = l2[j * 2 + 1] if j * 2 + 1 < l2.size() else Vector2.ZERO
+			packs.append(Vector4(q.x, q.y, q2.x, q2.y))
 		for m in _mats_charges():
 			m.set_shader_parameter("charges_m" if k == 0 else "charges_d", PackedVector4Array(packs))
 			m.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", l2.size())
@@ -1037,7 +1093,10 @@ func _cables_tph() -> void:
 			por.append(Vector3(0, y, -d))
 			if d >= -_lq_tph(true) - R_RENVOI_TPH and d <= L + _lq_tph(false) + R_RENVOI_TPH:
 				tra.append(Vector3(x0, y - Y_TRACTEUR_TPH, -d))
-			d += 1.0 if d < 30.0 or d > L - 30.0 else 5.0
+			# (un sommet par mètre sur toute la ligne : le porteur décrit sous le chariot un arc de 35 à 90 m de
+			# rayon, 2 à 6 cm de flèche sur 4 m — tous les 5 m, la carte graphique le tirait en ligne droite et les
+			# galets ne pouvaient pas le suivre ; écart de la corde au vrai câble < 5 mm, physique_cables.sage)
+			d += 1.0
 		# bouts du tracteur : posé sur la poulie de renvoi au fond du quai, il s'y enroule d'un quart de tour et
 		# plonge sous le quai, vers la machinerie (il filait tout droit dans le fond de la gare)
 		tra = _renvoi_tracteur(tra, x0)

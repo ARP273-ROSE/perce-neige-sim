@@ -1,5 +1,6 @@
 class_name PNQuips
 extends Object
+const _BONUS = preload("res://scripts/piques_bonus.gd")
 ## Piques sarcastiques + avis passagers — port des listes du sim PC
 ## (perce_neige_sim.py : CRASH_QUIPS, DERAIL_QUIPS, CABIN_QUIPS,
 ## REVERSE_QUIPS, DOORS_OPEN_QUIPS, PAX_REVIEWS).
@@ -259,6 +260,8 @@ static func liste(nom: String) -> Array:
 		var cr: Dictionary = (load("res://scripts/piques_reseau.gd") as Script).get_script_constant_map()
 		if cr.has(nom):
 			l.append_array(cr[nom])
+	# banque supplémentaire (24/11/2026)
+	l.append_array(_BONUS.liste(nom))
 	_listes[nom] = l
 	return l
 
