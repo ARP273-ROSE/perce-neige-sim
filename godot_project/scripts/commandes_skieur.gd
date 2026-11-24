@@ -92,11 +92,11 @@ func _ready() -> void:
 	col.add_theme_constant_override("v_separation", 14)
 	col.add_theme_constant_override("h_separation", 14)
 	_racine.add_child(col)
-	_b_conduire = _bouton("CONDUIRE", "S'asseoir au poste et conduire la rame")
+	_b_conduire = _bouton("PILOTER", "Prendre les commandes : au poste du Perce-Neige, s'asseoir et conduire ; à bord du Funival ou d'un téléphérique, son pupitre en manuel (touche E)")
 	_b_conduire.visible = false
 	_b_conduire.pressed.connect(func() -> void:
-		if skieur != null:
-			skieur.conduite_demandee.emit())
+		if main != null:
+			main.piloter())
 	col.add_child(_b_conduire)
 	_b_evac = _bouton("ÉVACUER", "Rame arrêtée en tunnel : enlever les issues de secours de la face et descendre sur la voie (touche U)")
 	_b_evac.visible = false
@@ -104,14 +104,14 @@ func _ready() -> void:
 		if main != null:
 			main.evacuer())
 	col.add_child(_b_evac)
-	_b_corde = _bouton("CORDE", "Remontée à l'arrêt en ligne : descendre à la corde du siège ou de la cabine jusqu'au sol")
+	_b_corde = _bouton("CORDE", "Évacuation : remontée à l'arrêt en ligne, descendre à la corde du siège ou de la cabine jusqu'au sol")
 	_b_corde.visible = false
 	_b_corde.pressed.connect(func() -> void:
 		var rm_c: RemonteesDomaine = main.get("remontees") if main != null else null
 		if rm_c != null:
 			rm_c.descendre_corde())
 	col.add_child(_b_corde)
-	_b_exploit = _bouton("EXPLOIT.", "EXPLOITATION AUTO : tout le service du funiculaire (embarquements, départs enchaînés), marche / arrêt, même en skieur (touche X ; Web : aussi F3 ou EXPLOIT. du tableau de bord)")
+	_b_exploit = _bouton("SERVICE AUTO", "Service automatique du funiculaire : embarquements et départs enchaînés sans conducteur, même en skieur (touche X ; Web : aussi F3)")
 	_b_exploit.toggle_mode = true
 	_b_exploit.toggled.connect(func(on: bool) -> void:
 		if main != null:
@@ -157,18 +157,24 @@ func _ready() -> void:
 	col.add_child(_b_echelle)
 	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche B) ; il enclenche l'exploitation auto pour son trajet")
 	_b_auto.toggle_mode = true
+	# retiré de l'écran le 24/11/2026 (« BOUCLE ça sert à rien, mais garde le code ») : touche B toujours là
+	_b_auto.visible = false
 	_b_auto.toggled.connect(func(on: bool) -> void:
 		if main != null and (main.skieur_auto != null) != on:
 			main.basculer_skieur_auto())
 	col.add_child(_b_auto)
-	_b_courir = _bouton("COURIR", "Courir (touche Maj) ; à ski : schuss")
+	_b_courir = _bouton("COURIR", "Courir (par défaut, 16 km/h ; Maj tenue pour marcher) ; à ski : schuss (ou Maj tenue)")
 	_b_courir.toggle_mode = true
+	_b_courir.button_pressed = true          # (course par défaut à pied, 24/11/2026)
 	_b_courir.toggled.connect(func(on: bool) -> void:
 		if skieur != null:
-			skieur.course = on)
+			if _chausse:
+				skieur.schuss = on
+			else:
+				skieur.course = on)
 	col.add_child(_b_courir)
 	# poste de commande de la remontée où l'on est (ou de la plus proche)
-	_b_poste = _bouton("POSTE", "Poste de commande de la remontée : marche, arrêt, arrêt d'urgence, vitesse")
+	_b_poste = _bouton("PUPITRE", "Pupitre de la remontée où l'on est (ou de la plus proche) : marche, arrêt, arrêt d'urgence, vitesse, portes, éclairage")
 	_b_poste.toggle_mode = true
 	_b_poste.visible = false
 	_b_poste.toggled.connect(func(on: bool) -> void:
@@ -192,7 +198,7 @@ func _ready() -> void:
 			pm.call("releve"))
 	col.add_child(_b_mesure)
 	# heure de jeu, en jeu (retour d'essai du 19/11/2026 : sur iPad, pas de clavier pour Page haut / Page bas)
-	var b_h: Button = _bouton("HEURE", "Heure de jeu : heure réelle ou choisie, jour, accélération ; −1 h / +1 h (touches Page haut / Page bas)")
+	var b_h: Button = _bouton("HEURE DU JEU", "Heure de jeu : heure réelle ou choisie, jour, accélération ; −1 h / +1 h (touches Page haut / Page bas)")
 	b_h.pressed.connect(func() -> void:
 		PanneauHeure.ouvrir(self, func() -> void:
 			if main != null:
@@ -200,12 +206,12 @@ func _ready() -> void:
 				message("Heure de jeu : " + HeureJeu.libelle(), 3.0)))
 	col.add_child(b_h)
 	# mode réseau : skier à plusieurs (PWA et PC dans le même salon)
-	var b_r: Button = _bouton("RÉSEAU", "Skier à plusieurs : créer un salon (un code à donner) ou en rejoindre un")
+	var b_r: Button = _bouton("MULTIJOUEUR", "Jouer à plusieurs (PC et iPad) : créer un salon (un code à donner) ou en rejoindre un")
 	b_r.pressed.connect(func() -> void:
 		if main != null:
 			PanneauReseau.ouvrir(self, main.reseau_client()))
 	col.add_child(b_r)
-	_b_vue = _bouton("1re PERS.", "Vue à la première ou à la troisième personne (touche V)")
+	_b_vue = _bouton("CAMÉRA", "Changer de caméra : par les yeux du skieur, ou derrière lui (touche V)")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)
 	_b_vue_ligne = _bouton("VUE LIGNE", "À bord d'une remontée : vue orbitale, depuis le pylône, depuis la gare, travelling, drone (touche T) ; glisser et molette en orbite")
@@ -214,7 +220,7 @@ func _ready() -> void:
 		if main != null:
 			main.basculer_vue_ligne())
 	col.add_child(_b_vue_ligne)
-	var b_q: Button = _bouton("QUITTER", "Revenir à la conduite")
+	var b_q: Button = _bouton("MODE CONDUITE", "Quitter le skieur et revenir à la conduite du Perce-Neige")
 	_b_quitter = b_q
 	b_q.pressed.connect(func() -> void:
 		if main != null:
@@ -270,8 +276,8 @@ func _bouton(texte: String, aide: String) -> Button:
 	b.text = texte
 	b.tooltip_text = aide
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(150, 64)
-	b.add_theme_font_size_override("font_size", 22)
+	b.custom_minimum_size = Vector2(170, 64)
+	b.add_theme_font_size_override("font_size", 20)
 	var sb: StyleBoxFlat = StyleBoxFlat.new()
 	sb.bg_color = Color(0.10, 0.13, 0.20, 0.55)
 	sb.border_color = Color(0.55, 0.75, 1.0, 0.8)
@@ -291,7 +297,9 @@ func basculer_vue() -> void:
 	if skieur == null:
 		return
 	skieur.premiere_personne = not skieur.premiere_personne
-	_b_vue.text = "3e PERS." if skieur.premiere_personne else "1re PERS."
+	# (« 1re / 3e personne, c'est pas clair », 24/11/2026 : CAMÉRA, comme dans les jeux ; l'info-bulle dit laquelle)
+	_b_vue.tooltip_text = ("Caméra : par les yeux du skieur — toucher pour passer derrière lui (touche V)" if skieur.premiere_personne
+		else "Caméra : derrière le skieur — toucher pour voir par ses yeux (touche V)")
 
 
 ## Bouton EXPLOIT. enfoncé ou non (état de l'exploitation automatique).
@@ -316,6 +324,8 @@ func set_chausse(oui: bool) -> void:
 	_maj_carte()
 	_b_ski.text = "DÉCHAUSSER" if oui else "CHAUSSER"
 	_b_courir.text = "SCHUSS" if oui else "COURIR"
+	if skieur != null:
+		_b_courir.set_pressed_no_signal(skieur.schuss if oui else skieur.course)
 	if not oui:
 		_info.text = ""
 		_info.visible = false
@@ -434,9 +444,46 @@ func set_evacuation_possible(oui: bool) -> void:
 
 
 ## Le bouton CONDUIRE n'apparaît qu'à côté du poste de pilotage.
+## Au poste du Perce-Neige (main, chaque image).
+var conduite_pn: bool = false
+
+
 func set_conduite_possible(oui: bool) -> void:
-	if _b_conduire != null and _b_conduire.visible != oui:
-		_b_conduire.visible = oui
+	conduite_pn = oui
+	var vis: bool = pilotage_possible()
+	if _b_conduire != null and _b_conduire.visible != vis:
+		_b_conduire.visible = vis
+
+
+## Va-et-vient (Funival, téléphérique) où l'on est : on peut en prendre les commandes.
+func ligne_pilotable() -> LigneRemontee:
+	var rm: RemonteesDomaine = main.get("remontees") if main != null else null
+	var vs: Array = rm.vehicule_du_skieur() if rm != null else []
+	if vs.is_empty() or not (vs[0] as LigneRemontee).vaetvient():
+		return null
+	return vs[0]
+
+
+func pilotage_possible() -> bool:
+	return conduite_pn or ligne_pilotable() != null
+
+
+## M : carte des pistes affichée ou cachée.
+func basculer_carte() -> void:
+	if _b_carte != null:
+		_b_carte.button_pressed = not _b_carte.button_pressed
+
+
+## PILOTER à bord d'un va-et-vient : le pupitre s'ouvre (PC : celui de la fenêtre du simulateur, déplié).
+func ouvrir_poste() -> void:
+	if main != null and bool(main.get("client_mode")):
+		var sr: Node = main.get("state_receiver")
+		if sr != null:
+			sr.call("envoyer", {"pupitre_deplier": true})
+	elif poste != null:
+		poste.visible = true
+		if _b_poste != null:
+			_b_poste.set_pressed_no_signal(true)
 
 
 ## Poste montré ou caché : première fois placé en haut à gauche (sur le PC, sous la rangée de boutons de la fenêtre

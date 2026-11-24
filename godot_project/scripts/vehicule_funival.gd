@@ -196,6 +196,13 @@ func _phares() -> void:
 		_phares_l.append(sp)
 
 
+func phares_visibles() -> bool:
+	for sp in _phares_l:
+		if (sp as Node3D).visible:
+			return true
+	return false
+
+
 ## Allume le phare du côté amont (vers_amont) ou aval ; `oui` faux : éteints.
 func phares(vers_amont: bool, oui: bool) -> void:
 	if _phares_l.size() < 2:

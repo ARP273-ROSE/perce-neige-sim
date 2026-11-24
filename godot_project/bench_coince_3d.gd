@@ -283,6 +283,7 @@ func _tick() -> void:
 		12:
 			_t += 1.0 / 60.0
 			sk.chausse = false
+			sk.course = false       # (le filet se juge en marchant : à la course, défaut du 24/11/2026, il file à 11 m)
 			_viser(sk, sk.global_position + Vector3.FORWARD, 0.85)
 			if _t > 3.0:
 				var loin: float = sk.global_position.distance_to(_p_filet)
@@ -294,6 +295,7 @@ func _tick() -> void:
 				_filet_ok = _filet_ok and ok_pl
 				sk.degagements = 0
 				sk.pieges_sans_issue = 0
+				sk.course = true
 				_st = 2
 		2:
 			# on ne marche qu'une fois les remontées proches construites : leurs plateformes

@@ -1178,6 +1178,7 @@ func _forme_relief(faces: PackedVector3Array, cle: String = "", gen: int = -1) -
 	f.backface_collision = true
 	var cs: CollisionShape3D = CollisionShape3D.new()
 	cs.name = "Relief"
+	cs.set_meta("relief", true)       # (le nom ne tient pas : Godot renomme les doublons ; lu par le skieur, sol_terrain)
 	cs.shape = f
 	_decor.add_child(cs)
 	triangles += faces.size() / 3

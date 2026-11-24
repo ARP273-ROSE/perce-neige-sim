@@ -38,9 +38,10 @@ var _col_droite: Control = null
 # Libellé du bouton MODE selon le mode courant (sans accent : police par
 # défaut des exports mobiles).
 const MODE_LABEL: Dictionary = {
-	"normal": "MODE\nNORMAL",
-	"challenge": "MODE\nDEFI",
-	"panne": "MODE\nPANNES",
+	# (« PARTIE » : « MODE » désigne désormais MODE SKIEUR / MODE CONDUITE, 24/11/2026)
+	"normal": "PARTIE\nNORMALE",
+	"challenge": "PARTIE\nDÉFI",
+	"panne": "PARTIE\nPANNES",
 }
 
 # Menu des annonces diffusables à la demande : clé de groupe → libellé FR.
@@ -311,11 +312,11 @@ func _build() -> void:
 	# AUTO : appel DIRECT du jeu (pas de synthèse clavier — plus fiable
 	# sur web) ; vrai bouton à bascule, vert quand l'exploitation
 	# automatique est active.
-	_b_auto = _mk_button("EXPLOIT.",
-		"EXPLOITATION AUTO (F3) : tout le service — embarquement ~30 s puis " +
+	_b_auto = _mk_button("SERVICE AUTO",
+		"SERVICE AUTO (F3) : tout le service — embarquement ~30 s puis " +
 		"départ, trajets enchaînés. Vert = actif. (Le PILOTE AUTO d'un seul " +
 		"voyage n'existe que sur le PC ; la BOUCLE est celle du skieur.)")
-	_b_auto.custom_minimum_size = Vector2(102, 56)
+	_b_auto.custom_minimum_size = Vector2(150, 56)
 	_b_auto.toggle_mode = true
 	_b_auto.toggled.connect(func(_on: bool) -> void:
 		if _main != null and _main.auto_operator != null:
@@ -330,7 +331,7 @@ func _build() -> void:
 	_bind_tap(_b_lights, "toggle_headlights")
 	top.add_child(_b_lights)
 
-	_b_cabin = _mk_button("CABINE", "Éclairage de la cabine (touche C) — enfoncé = allumé")
+	_b_cabin = _mk_button("ÉCLAIRAGE", "Éclairage de la cabine (touche C) — enfoncé = allumé")
 	_b_cabin.custom_minimum_size = Vector2(102, 56)
 	_b_cabin.toggle_mode = true
 	_b_cabin.pressed.connect(func() -> void:
@@ -349,7 +350,7 @@ func _build() -> void:
 
 	top.add_child(_spacer(14))
 
-	var b_view: Button = _mk_button("VUE", "Vue cabine → extérieure → salle des machines")
+	var b_view: Button = _mk_button("CAMÉRA", "Caméra : cabine → extérieure → salle des machines (touche O)")
 	b_view.custom_minimum_size = Vector2(102, 56)
 	_bind_tap(b_view, "toggle_view")
 	top.add_child(b_view)
@@ -366,7 +367,7 @@ func _build() -> void:
 
 	# SKIEUR (07/10/2026) : le skieur jouable — on marche dans les gares,
 	# on prend le funiculaire, on va au poste (touche K)
-	_b_skieur = _mk_button("SKIEUR", "Incarner un skieur (touche K) — enfoncé = actif")
+	_b_skieur = _mk_button("MODE\nSKIEUR", "Mode skieur : marcher et skier sur le domaine (touche F9 ou K)")
 	_b_skieur.custom_minimum_size = Vector2(112, 56)
 	_b_skieur.toggle_mode = true
 	_b_skieur.pressed.connect(func() -> void:
@@ -416,7 +417,7 @@ func _build() -> void:
 	# MODE : rotation NORMAL → DÉFI → PANNES (touche M au clavier). Sur
 	# iPad il n'y a pas de clavier : c'est le seul moyen de changer de mode
 	# sans relancer la page.
-	_b_mode = _mk_button("MODE\nNORMAL",
+	_b_mode = _mk_button("PARTIE\nNORMALE",
 		"Changer de mode : NORMAL (exploitation), DEFI (conduite notee), " +
 		"PANNES (incidents a gerer)")
 	_b_mode.custom_minimum_size = Vector2(126, 62)

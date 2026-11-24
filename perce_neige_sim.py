@@ -7592,51 +7592,40 @@ def echelle_toile_3d(largeur: float, hauteur: float) -> float:
 
 
 class BoutonHud(QPushButton):
-    """Bouton de la barre du plein cadre, dans le style du HUD tactile de la
-    3D (EXPLOIT., CARTE…) : fond gris bleuté arrondi, liseré bleu clair,
-    libellé court en majuscules, raccourci clavier en petit dessous."""
+    """Bouton de la barre du plein cadre, dessiné EXACTEMENT comme ceux de la colonne de la 3D
+    (commandes_skieur.gd, _bouton : 170 × 64 unités de toile, rayon 14, liseré bleu clair de 2, fond bleu nuit
+    translucide, police 20, vert quand enfoncé) — retour d'utilisateur du 24/11/2026 : « en haut à gauche ils n'ont
+    pas la même forme qu'à droite ». Le raccourci clavier est dans l'info-bulle, comme à droite."""
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
         self.libelle = ""
         self.raccourci = ""
+        self.aide = ""
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
-    def regler(self, libelle: str, raccourci: str) -> None:
-        if (libelle, raccourci) != (self.libelle, self.raccourci):
-            self.libelle, self.raccourci = libelle, raccourci
-            self.setToolTip(raccourci)
+    def regler(self, libelle: str, raccourci: str, aide: str = "") -> None:
+        if (libelle, raccourci, aide) != (self.libelle, self.raccourci, self.aide):
+            self.libelle, self.raccourci, self.aide = libelle, raccourci, aide
+            self.setToolTip(f"{aide} ({raccourci})" if aide and raccourci else (aide or raccourci))
             self.update()
 
     def paintEvent(self, ev) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        r = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
-        h = r.height()
-        if self.isDown():
-            fond = QColor(120, 150, 190, 235)
-        elif self.underMouse():
-            fond = QColor(110, 125, 150, 225)
-        else:
-            fond = QColor(92, 104, 126, 205)
-        p.setPen(QPen(QColor(150, 190, 240, 230), max(1.5, h * 0.03)))
+        h = float(self.height())
+        u = h / 64.0                                   # une unité de la toile de la 3D
+        r = QRectF(self.rect()).adjusted(u, u, -u, -u)
+        fond = QColor(51, 166, 77, 230) if self.isDown() else QColor(26, 33, 51, 140)
+        p.setPen(QPen(QColor(140, 191, 255, 204), 2.0 * u))
         p.setBrush(fond)
-        p.drawRoundedRect(r, h * 0.14, h * 0.14)
-        p.setPen(QColor(238, 242, 248))
+        p.drawRoundedRect(r, 14.0 * u, 14.0 * u)
+        p.setPen(QColor(255, 255, 255))
         f = QFont(self.font())
-        f.setBold(True)
-        f.setPixelSize(max(10, int(h * 0.30)))
+        f.setPixelSize(max(9, int(20.0 * u)))
         p.setFont(f)
-        haut = QRectF(r.x(), r.y() + h * 0.08, r.width(), h * 0.50)
-        p.drawText(haut, int(Qt.AlignmentFlag.AlignCenter), self.libelle)
-        if self.raccourci:
-            f2 = QFont(self.font())
-            f2.setPixelSize(max(9, int(h * 0.19)))
-            p.setFont(f2)
-            p.setPen(QColor(200, 215, 235, 220))
-            bas = QRectF(r.x(), r.y() + h * 0.56, r.width(), h * 0.34)
-            p.drawText(bas, int(Qt.AlignmentFlag.AlignCenter), self.raccourci)
+        p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), self.libelle)
         p.end()
 
 
@@ -7661,7 +7650,8 @@ class BarrePleinCadre(QWidget):
 
     # (VUES retiré : la 3D a son bouton VUE LIGNE, à bord seulement — retour d'utilisateur du 19/11/2026, « boutons
     # en double ») ; PUPITRE seulement quand le pupitre concerne ce qu'on fait (voir GameWidget._pupitre_utile)
-    CLES = ("ecran", "pupitre", "poste", "skieur", "pause", "aide")
+    # (PLEIN ÉCRAN retiré avec F11, 24/11/2026 : la vue 3D plein cadre est toujours en plein écran)
+    CLES = ("poste", "skieur", "pupitre", "pause", "aide")
 
     def __init__(self, jeu: "GameWidget") -> None:
         super().__init__(jeu.window(),
@@ -7692,15 +7682,18 @@ class BarrePleinCadre(QWidget):
         self._vu = etat
         plein, skieur, pause, aide, _lang, pupitre_utile = etat
         b = self._boutons
-        b["ecran"].regler(T("WINDOW", "FENÊTRE") if plein else T("FULL SCREEN", "PLEIN ÉCRAN"),
-                          T("Esc", "Échap") if plein else "")
-        # PUPITRE : replie ou déplie le pupitre en surimpression ; ÉCRANS : retour au poste complet (vue en plan,
-        # machinerie, journal) — « POSTE » se confondait avec le POSTE du HUD du skieur
-        b["pupitre"].regler(T("PANEL", "PUPITRE"), "Tab")
-        b["poste"].regler(T("SCREENS", "ÉCRANS"), "F12")
-        b["skieur"].regler(T("DRIVE", "CONDUIRE") if skieur else T("SKIER", "SKIEUR"), "F9")
+        # noms du 24/11/2026 (« les noms ne sont pas forcément clairs ») : POSTE PN = le poste complet du
+        # funiculaire (vue en plan, machinerie, journal), MODE SKIEUR / MODE CONDUITE = le mode où l'on va
+        b["pupitre"].regler(T("PANEL", "PUPITRE"), "Tab", T("Fold or unfold the control panel",
+                                                          "Replier ou déplier le pupitre de commande"))
+        b["poste"].regler(T("PN DESK", "POSTE PN"), "F12", T("Back to the Perce-Neige driving desk (plan view, machinery, log)",
+                                                          "Retour au poste du Perce-Neige (vue en plan, machinerie, journal)"))
+        b["skieur"].regler(T("DRIVE MODE", "MODE CONDUITE") if skieur else T("SKIER MODE", "MODE SKIEUR"), "F9",
+                           T("Drive the Perce-Neige", "Conduire le Perce-Neige") if skieur
+                           else T("Walk and ski around the resort", "Marcher et skier sur le domaine"))
         b["pause"].regler(T("RESUME", "REPRENDRE") if pause else T("PAUSE", "PAUSE"), "P")
-        b["aide"].regler(T("CLOSE", "FERMER") if aide else T("HELP", "AIDE"), "F1")
+        b["aide"].regler(T("CLOSE", "FERMER") if aide else T("HELP", "AIDE"), "F1",
+                         T("Keys and controls", "Touches et commandes"))
         b["pupitre"].setVisible(pupitre_utile)
         self._haut_bouton = 0          # retaille au prochain placer()
 
@@ -7709,15 +7702,15 @@ class BarrePleinCadre(QWidget):
         k = echelle_toile_3d(zone.width(), zone.height())
         # (toile : boutons de 52 de haut et 124 de large, rangée de 7 × 132 = 924 au plus, en y 8 → 60 ; le poste du
         # skieur commence à 72, son compteur à 76, sa carte à 1600 − 526 = 1074 et sa colonne à droite)
-        h = int(max(30, 52 * k))
+        h = int(max(30, 64 * k))
         if h != self._haut_bouton:
             self._haut_bouton = h
-            self._lay.setSpacing(max(4, int(8 * k)))
+            self._lay.setSpacing(max(4, int(14 * k)))
             for bt in self._boutons.values():
-                bt.setFixedSize(int(max(70, 124 * k)), h)
+                bt.setFixedSize(int(max(70, 170 * k)), h)
             self.adjustSize()
-        m = max(4, int(8 * k))
-        x, y = zone.x() + m, zone.y() + m
+        # (en y 8 → 72 : la ligne d'info du skieur de la 3D commence à 76)
+        x, y = zone.x() + max(4, int(24 * k)), zone.y() + max(4, int(8 * k))
         if self.pos().x() != x or self.pos().y() != y:
             self.move(x, y)
 
@@ -7779,7 +7772,7 @@ class PupitreSurimpression(QWidget):
             y = int(zone.y() + fy * zone.height())
         elif skieur:
             x = int(zone.x() + 16 * k)
-            y = int(zone.y() + 72 * k)
+            y = int(zone.y() + 84 * k)
         else:
             x = int(zone.x() + zone.width() - w - zone.width() * 0.115)      # (colonne de boutons du skieur : ~11 %)
             y = int(zone.y() + zone.height() * 0.06)
@@ -7895,7 +7888,7 @@ class GameWidget(QWidget):
         Qt.Key.Key_L, Qt.Key.Key_N, Qt.Key.Key_Backspace,
         Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3,
         Qt.Key.Key_F4, Qt.Key.Key_F5, Qt.Key.Key_F6,
-        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F11,
+        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F12,
         Qt.Key.Key_O,
         Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
         # ni la conduite ni la rame : klaxon, phares, éclairages (retour d'utilisateur,
@@ -7907,8 +7900,9 @@ class GameWidget(QWidget):
     SKIEUR_GARDE = frozenset(int(k) for k in (
         Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3, Qt.Key.Key_F4,
         Qt.Key.Key_F5, Qt.Key.Key_F6, Qt.Key.Key_F7, Qt.Key.Key_F8,
-        Qt.Key.Key_F9, Qt.Key.Key_F11, Qt.Key.Key_Escape, Qt.Key.Key_P,
-        Qt.Key.Key_N, Qt.Key.Key_L, Qt.Key.Key_J, Qt.Key.Key_C,
+        Qt.Key.Key_F9, Qt.Key.Key_F12, Qt.Key.Key_Escape, Qt.Key.Key_P,
+        Qt.Key.Key_N, Qt.Key.Key_L, Qt.Key.Key_J,
+        # (C, H, K : commandes du véhicule où l'on est, relayées à la 3D — 24/11/2026)
         # X : exploitation auto, aussi en skieur (09/10/2026)
         Qt.Key.Key_X,
         # R : nouveau voyage après un accident, sans quitter le skieur
@@ -7993,6 +7987,8 @@ class GameWidget(QWidget):
         # current LANG so the language toggle (L) flips tooltips live.
         K = Qt.Key
         self._key_tooltips: dict[int, tuple[str, str]] = {
+            int(Qt.Key.Key_F12): ("3D view, full screen (F12; Esc or F12 to come back)",
+                                  "Vue 3D en plein écran (F12 ; Échap ou F12 pour revenir)"),
             int(K.Key_Up): (
                 "Raise speed command (+%) — regulator tracks smoothly",
                 "Augmenter la consigne de vitesse (+%) — le régulateur suit",
@@ -8217,7 +8213,9 @@ class GameWidget(QWidget):
         # incarne un skieur dans la 3D ; le PC garde la rame (AUTO)
         self._skieur = False
         self._skieur_vue_n = 0                  # appuis sur V (1re / 3e pers.)
-        self._skieur_ski_n = 0                  # appuis sur E (chausser)
+        self._skieur_ski_n = 0                  # appuis sur E (AGIR : chausser, piloter, échelle, corde…)
+        self._skieur_carte_n = 0                # appuis sur M (carte)
+        self._skieur_cmd = [0, ""]              # H / C / K : commande du véhicule où l'on est (24/11/2026)
         self._skieur_evac_n = 0                 # appuis sur I (évacuer)
         self._skieur_boucle_n = 0               # appuis sur B (BOUCLE du skieur)
         self._skieur_vue_ligne_n = 0            # appuis sur T (vues de la remontée)
@@ -8316,7 +8314,7 @@ class GameWidget(QWidget):
         elif "releve_auto_fait" in m:
             faits = self._releves_auto_faits()
             faits.append(str(m["releve_auto_fait"]))
-            _ecrire_prefs({"releves_auto": {"version": VERSION, "faits": faits}})
+            _ecrire_prefs({"releves_auto": {"jour": time.strftime("%Y-%m-%d"), "faits": faits}})
             self._releves_auto_seance.append(str(m["releve_auto_fait"]))
             self._t_releves_auto = -1e9
         elif "hd_possible" in m:
@@ -8380,7 +8378,7 @@ class GameWidget(QWidget):
         elif "touche" in m:
             # J / C / X tapées (ou bouton EXPLOIT. du skieur) dans la fenêtre
             # 3D : c'est le PC qui tient ces états
-            k = {"J": Qt.Key.Key_J, "C": Qt.Key.Key_C,
+            k = {"J": Qt.Key.Key_J, "C": Qt.Key.Key_C, "H": Qt.Key.Key_H, "K": Qt.Key.Key_K,
                  "X": Qt.Key.Key_X}.get(str(m["touche"]))
             if k is not None:
                 self._virtual_key(k)
@@ -8393,6 +8391,10 @@ class GameWidget(QWidget):
                       f"3D view: graphics level {m['perf']}/{m.get('perf_max', 6)} — {m.get('perf_txt', '')}",
                       f"Vue 3D : réglages graphiques {m['perf']}/{m.get('perf_max', 6)} — {m.get('perf_txt', '')}",
                       "info")
+        elif m.get("pupitre_deplier"):
+            # PILOTER à bord d'un va-et-vient (Funival, téléphérique) : son pupitre, déplié
+            if self._pupitre_replie:
+                self.basculer_pupitre()
         elif "skieur_prep" in m:
             # préparation du décor 3D du skieur : texte d'avancement, puis
             # "" avec la durée quand c'est prêt (retour d'utilisateur, 08/10/2026 : « on ne
@@ -8572,17 +8574,19 @@ class GameWidget(QWidget):
             self._virtual_key(Qt.Key.Key_D)
         self._godot_view3d = 0
         self._skieur = True
+        self._plein_cadre_force = None          # (vue 3D plein écran, la vue par défaut)
         self._skieur_etat = (False, False, 0, 0.0, False, False)
         self._skieur_prep_txt = T("preparing the 3D scenery…", "préparation du décor 3D…")
         self._key_state.clear()
         self._touches_skieur = set()
         add_event(st, "skieur",
-                  "Skier: ZQSD / arrows to walk, Shift to run, T lift views, F12 full frame, V 1st/3rd "
-                  "person, X auto-operation, B skier loop, drag in the 3D "
-                  "view to look — F9 to drive again",
-                  "Skieur : ZQSD / flèches pour marcher, Maj pour courir, T vues "
-                  "de la remontée, F12 plein cadre, V 1re/3e personne, X exploitation auto, B boucle, glisser "
-                  "dans la 3D pour regarder — F9 pour reprendre la conduite",
+                  "Skier: ZQSD / arrows to move (running; Shift to walk), E to act (skis, pilot, ladder, rope), "
+                  "M map, V camera, T lift views, H/C/K lights and horn of your vehicle, Tab control panel, "
+                  "X auto service, drag to look — F9 to drive again",
+                  "Skieur : ZQSD / flèches pour avancer (en courant ; Maj pour marcher), E pour agir (skis, "
+                  "piloter, échelle, corde), M carte, V caméra, T vues de la remontée, H/C/K phares, éclairage et "
+                  "klaxon de votre véhicule, Tab pupitre, X service auto, glisser pour regarder — F9 pour reprendre "
+                  "la conduite",
                   "info")
 
     def _sortir_skieur(self, conduire: bool = False) -> None:
@@ -9415,6 +9419,8 @@ class GameWidget(QWidget):
                 state_dict["skieur_auto"] = self._skieur_boucle_n
                 state_dict["skieur_vue_ligne"] = self._skieur_vue_ligne_n
                 state_dict["skieur_poste_fermer"] = self._skieur_poste_fermer_n
+                state_dict["skieur_carte"] = self._skieur_carte_n
+                state_dict["skieur_cmd"] = list(self._skieur_cmd)
                 state_dict["echelle_ui"] = self._facteur_ui()
                 state_dict["exploitation"] = bool(self.auto_ops.enabled)
                 # panneau des départs de la gare aval en rouge « fermé »
@@ -9787,15 +9793,15 @@ class GameWidget(QWidget):
             self.update()
 
     def _plein_cadre_3d(self) -> bool:
-        """La 3D prend toute la fenêtre : poste du funiculaire, journal et
-        jauges masqués. Automatique quand le skieur est dehors (ni dans la
-        rame, ni dans les gares ou le tunnel du funiculaire), ou forcé par F12."""
+        """La 3D prend tout l'écran, comme un jeu : c'est la vue PAR DÉFAUT dès que la 3D est là, en conduite comme en
+        skieur (audit d'intégration du 24/11/2026 : le poste complet du funiculaire — vue en plan, profil, machinerie,
+        journal — devient un écran qu'on ouvre, F12 ou POSTE PN, et qu'on referme, F12, Échap ou VUE 3D). Le pupitre
+        de la machine où l'on est reste en surimpression (Tab)."""
         if self._cabin_view_state != 2:
             return False
         if self._plein_cadre_force is not None:
             return self._plein_cadre_force
-        dedans, _ret, ecoute = self._skieur_etat[0], self._skieur_etat[1], self._skieur_etat[2]
-        return self._skieur and not dedans and ecoute == 2
+        return True
 
     def _maj_plein_cadre(self) -> None:
         """Replace la 3D si le plein cadre vient de changer, passe la fenêtre
@@ -9810,7 +9816,8 @@ class GameWidget(QWidget):
             self.update()
         fen = self.window()
         if hasattr(fen, "plein_ecran_3d"):
-            fen.plein_ecran_3d(pc and self._plein_ecran_3d)
+            # vue 3D plein cadre = plein écran, toujours (F11 retiré le 24/11/2026 : un seul geste, F12)
+            fen.plein_ecran_3d(pc)
         self._maj_barre_3d()
 
     def _maj_barre_3d(self) -> None:
@@ -9874,12 +9881,7 @@ class GameWidget(QWidget):
     def _bouton_plein_cadre(self, cle: str) -> None:
         """Clic sur un bouton de la barre du plein cadre : même effet que la
         touche indiquée sur le bouton."""
-        if cle == "ecran":
-            fen = self.window()
-            self._plein_ecran_3d = not bool(fen.isFullScreen())
-            if fen.isFullScreen() and not getattr(fen, "_plein_par_3d", False):
-                fen.basculer_plein_ecran()          # plein écran de F11
-        elif cle == "pupitre":
+        if cle == "pupitre":
             self.basculer_pupitre()
         elif cle == "poste":
             if self._plein_cadre_3d():
@@ -10317,10 +10319,6 @@ class GameWidget(QWidget):
         if self._saisie_3d and self._saisie_relayer(ev):
             ev.accept()
             return
-        if k == Qt.Key.Key_F11 and hasattr(self.window(), "basculer_plein_ecran"):
-            self.window().basculer_plein_ecran()
-            ev.accept()
-            return
         if k in (Qt.Key.Key_F7, Qt.Key.Key_F8):
             self.changer_volume(-0.1 if k == Qt.Key.Key_F7 else 0.1)
             ev.accept()
@@ -10355,13 +10353,9 @@ class GameWidget(QWidget):
                 and self._plein_cadre_3d() and not self._show_annmenu
                 and not self._show_help and not self._show_info
                 and st.mode == MODE_RUN):
-            # Échap en plein cadre : plein écran → fenêtre, puis plein
-            # cadre → poste de conduite (le voyage continue ; un Échap de
+            # Échap en plein cadre : retour au poste de conduite, en fenêtre (le voyage continue ; un Échap de
             # plus, au poste, ramène au menu comme avant)
-            if self._plein_ecran_3d:
-                self._plein_ecran_3d = False
-            else:
-                self._plein_cadre_force = False
+            self._plein_cadre_force = False
             self._maj_plein_cadre()
             ev.accept()
             return
@@ -10372,7 +10366,14 @@ class GameWidget(QWidget):
             if k == Qt.Key.Key_V and not ev.isAutoRepeat():
                 self._skieur_vue_n += 1
             if k == Qt.Key.Key_E and not ev.isAutoRepeat():
-                self._skieur_ski_n += 1         # chausser / déchausser
+                self._skieur_ski_n += 1         # AGIR (chausser, piloter, échelle, corde, évacuer…)
+            if k == Qt.Key.Key_M and not ev.isAutoRepeat():
+                self._skieur_carte_n += 1       # carte, comme dans les jeux
+            if k in (Qt.Key.Key_H, Qt.Key.Key_C, Qt.Key.Key_K) and not ev.isAutoRepeat():
+                # phares, éclairage, klaxon : du véhicule où l'on est (la 3D le sait), le Perce-Neige seulement si l'on
+                # y est (demande d'utilisateur du 24/11/2026)
+                self._skieur_cmd = [self._skieur_cmd[0] + 1,
+                                    {Qt.Key.Key_H: "phares", Qt.Key.Key_C: "eclairage", Qt.Key.Key_K: "klaxon"}[k]]
             if k == Qt.Key.Key_U and not ev.isAutoRepeat():
                 self._skieur_evac_n += 1        # issUes de secours (I est « inverser »)
             if k == Qt.Key.Key_B and not ev.isAutoRepeat():
@@ -11342,8 +11343,8 @@ class GameWidget(QWidget):
         voulu = (f if f is not None else 1.0) * self._taille_ui
         if k < 0.97 * voulu:
             plein = self.window() is not None and self.window().isFullScreen()
-            en += " (limited by the room" + ("" if plein else " — F11: full screen") + ")"
-            fr += " (limitée par la place" + ("" if plein else " — F11 : plein écran") + ")"
+            en += " (limited by the room" + ("" if plein else " — maximize the window") + ")"
+            fr += " (limitée par la place" + ("" if plein else " — agrandir la fenêtre") + ")"
         return (en, fr)
 
     def _ecran_a_change(self) -> None:
@@ -11515,7 +11516,22 @@ class GameWidget(QWidget):
         # Persistent wall-clock overlay — always drawn last so it's
         # visible above every screen (title, run, paused, menus).
         self._draw_clock_badge(p, w, h)
+        # VUE 3D : le passage en plein écran avait sa touche (F12) mais pas de bouton, alors que le retour en avait
+        # un (retour d'utilisateur du 24/11/2026) ; au-dessus de la vue 3D, à gauche de la pendule
+        if (self.state.mode in (MODE_RUN, MODE_PAUSED) and self._cabin_view_state == 2
+                and not self._plein_cadre_3d() and self._godot_bridge is not None):
+            self._draw_bouton_vue_3d(p, QRectF(20, 6, 170, 32))
         p.end()
+
+    def _draw_bouton_vue_3d(self, p: QPainter, r: QRectF) -> None:
+        """Bouton VUE 3D du poste, dessiné comme ceux de la vue 3D (liseré bleu clair, fond bleu nuit)."""
+        p.setPen(_cached_pen(QColor(140, 191, 255, 204), 1.5))
+        p.setBrush(QBrush(QColor(26, 33, 51, 220)))
+        p.drawRoundedRect(r, 7, 7)
+        p.setPen(_cached_pen(QColor(255, 255, 255)))
+        p.setFont(_cached_font("Segoe UI", 10, QFont.Weight.DemiBold))
+        p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), T("3D VIEW  ⤢", "VUE 3D  ⤢"))
+        self._hit_zones.append((QRectF(r), int(Qt.Key.Key_F12), False))
 
     def _draw_crash_overlay(self, p: QPainter, w: int, h: int) -> None:
         st = self.state
@@ -17115,6 +17131,14 @@ class GameWidget(QWidget):
             ouv = (any(x == "ouvertes" for x in pv) if isinstance(pv, list) else d.get("portes") == "ouvertes")
             boutons.append((T("CLOSE DOORS", "FERMER PORTES") if ouv else T("OPEN DOORS", "OUVRIR PORTES"),
                             "portes", "fermer" if ouv else "ouvrir", ouv, COLOR_WARN))
+        # commandes du véhicule où l'on est (à bord seulement, celles qui ont un sens : 24/11/2026)
+        for cv in d.get("cmd_vehicule") or []:
+            if cv == "phares":
+                boutons.append((T("HEADLIGHTS", "PHARES"), "phares", None, bool(d.get("phares_on")), COLOR_WARN))
+            elif cv == "eclairage":
+                boutons.append((T("CABIN LIGHTS", "ÉCLAIRAGE"), "eclairage", None, bool(d.get("eclairage_on")), COLOR_WARN))
+            elif cv == "klaxon":
+                boutons.append((T("HORN", "KLAXON"), "klaxon", None, False, QColor(200, 200, 210)))
         if pr.groupe_evacuation(g):
             boutons.append((T("EVACUATE", "ÉVACUER"), "evacuer", None, False, COLOR_ALARM))
         if d.get("hors_service"):
@@ -17971,16 +17995,17 @@ class GameWidget(QWidget):
 
     @staticmethod
     def _releves_auto_faits() -> list:
-        """Situations déjà relevées pour cette version."""
+        """Situations déjà relevées aujourd'hui (relevés automatiques réguliers, demande d'utilisateur du
+        24/11/2026 : ils étaient plafonnés à 5 par VERSION, donc rares entre deux versions)."""
         r = _lire_prefs().get("releves_auto")
-        if isinstance(r, dict) and r.get("version") == VERSION and isinstance(r.get("faits"), list):
+        if isinstance(r, dict) and r.get("jour") == time.strftime("%Y-%m-%d") and isinstance(r.get("faits"), list):
             return r["faits"]
         return []
 
     _RELEVES_AUTO_MAX = 5
 
     def _releves_auto_voulus(self) -> list:
-        """Situations à relever maintenant : au plus 5 relevés par version, un par situation et par
+        """Situations à relever maintenant : au plus 5 relevés par jour, un par situation et par
         séance, si l'envoi des rapports est accepté. (Relu au plus toutes les 5 s : appelé à chaque
         envoi d'état.)"""
         t = time.monotonic()
@@ -18313,10 +18338,11 @@ class GameWidget(QWidget):
                          "vue cabine : off → dessinée → 3D")),
                 ("O", T("3D view: cabin / ext. / machines",
                         "vue 3D : cabine / ext. / machines")),
-                ("F9", T("skier in the 3D view (ZQSD, Shift, V, E skis, U evacuate, T lift views)",
-                         "skieur dans la vue 3D (ZQSD, Maj, V, E skis, U évacuer, T vues de la remontée)")),
-                ("F12", T("3D full screen / driving desk (full frame in the window when skiing away)",
-                          "3D plein écran / poste de conduite (plein cadre dans la fenêtre à ski, loin du funi)")),
+                ("F9", T("skier mode: ZQSD move (Shift walk), E act, M map, V camera, T lift views, H/C/K your vehicle",
+                         "mode skieur : ZQSD avancer (Maj marcher), E agir, M carte, V caméra, T vues remontée, "
+                         "H/C/K votre véhicule")),
+                ("F12", T("3D view full screen ↔ Perce-Neige driving desk (Esc: back to the desk)",
+                          "vue 3D plein écran ↔ poste du Perce-Neige (Échap : retour au poste)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),
@@ -18329,7 +18355,6 @@ class GameWidget(QWidget):
                 (T("Home", "Début"), T("back to the title screen",
                                        "retour à l'écran titre")),
                 ("F1", T("this screen", "cet écran")),
-                ("F11", T("full screen / window", "plein écran / fenêtre")),
                 ("F7 / F8", T("overall volume − / +", "volume général − / +")),
                 ("F3", T("the real machine + links", "la vraie machine + liens")),
                 ("F5", T("auto-operation trip log", "journal des trajets auto")),
@@ -18891,15 +18916,9 @@ class MainWindow(QMainWindow):
         act_h = menu.addAction(self._tr("Game time…", "Heure de jeu…"))
         act_h.triggered.connect(lambda _on=False: self._choisir_heure_jeu())
         menu.addSeparator()
-        self._act_plein = menu.addAction(self._tr("Full screen", "Plein écran"))
-        self._act_plein.setCheckable(True)
-        self._act_plein.setShortcut("F11")
-        # (F11 est aussi traité par GameWidget : le raccourci du menu ne
-        # se déclenche pas quand le jeu a le focus clavier sous Linux)
-        self._act_plein.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
-        self._act_plein.triggered.connect(lambda _on=False: self.basculer_plein_ecran())
-        act_cadre = menu.addAction(self._tr("3D full frame / driving desk (F12)",
-                                            "Vue 3D plein cadre / poste de conduite (F12)"))
+        # (« Plein écran » F11 retiré le 24/11/2026 : la vue 3D, F12, est en plein écran)
+        act_cadre = menu.addAction(self._tr("3D view full screen / driving desk (F12)",
+                                            "Vue 3D plein écran / poste de conduite (F12)"))
         act_cadre.triggered.connect(lambda _on=False: self.game.basculer_plein_cadre())
 
     def plein_ecran_3d(self, on: bool) -> None:
@@ -18922,29 +18941,6 @@ class MainWindow(QMainWindow):
                     self.showMaximized()
                 else:
                     self.showNormal()
-
-    def basculer_plein_ecran(self) -> None:
-        """F11 : plein écran ↔ fenêtre. Sur un portable, c'est la barre
-        des tâches, la barre de titre et le menu qui reviennent à la vue
-        et au pupitre (≈ 14 % de hauteur en plus à 1536 × 864)."""
-        if self.isFullScreen() and getattr(self, "_plein_par_3d", False):
-            # plein écran de la vue 3D : F11 le quitte, la 3D reste plein cadre
-            self.game._plein_ecran_3d = False
-            self.plein_ecran_3d(False)
-            return
-        if self.isFullScreen():
-            if getattr(self, "_etait_agrandie", False):
-                self.showMaximized()
-            else:
-                self.showNormal()
-            plein = False
-        else:
-            self._etait_agrandie = self.isMaximized()
-            self.showFullScreen()
-            plein = True
-        if getattr(self, "_act_plein", None) is not None:
-            self._act_plein.setChecked(plein)
-        _ecrire_prefs({"plein_ecran": plein})
 
     def _choisir_taille_ui(self, f: float) -> None:
         _ecrire_prefs({"taille_ui": f})
@@ -19869,8 +19865,6 @@ def main() -> None:
         win.showMaximized()
     else:
         win.show()
-    if _lire_prefs().get("plein_ecran"):
-        win.basculer_plein_ecran()
     QTimer.singleShot(1200, lambda: _demander_accord_rapports(win, rapports))
     # Vue cabine 3D d'entrée de jeu (si le viewer est disponible) : lancée
     # une fois la fenêtre à l'écran, pour que l'embarquement ait un parent.

@@ -32,7 +32,7 @@ const GRIMPE_MAX: float = 1.25          # à pied hors des gares (`grimpe`) : on
                                         # (retour d'utilisateur, 08/10/2026 : « coincé entre les
                                         # deux rails »)
 const V_MARCHE: float = 1.45
-const V_COURSE: float = 3.3
+const V_COURSE: float = 16.0 / 3.6     # 16 km/h (demande d'utilisateur du 24/11/2026 ; 3,3 m/s avant)
 const ACCEL: float = 7.0
 const G: float = 9.81
 const Y_YEUX: float = 1.62
@@ -46,7 +46,10 @@ const N_IMAGES: int = 8
 var actif: bool = false
 ## Commande de marche : x vers la droite, y vers l'avant (−1…1).
 var entree: Vector2 = Vector2.ZERO
-var course: bool = false
+## À pied : on court par défaut, Maj (ou COURIR relâché) pour marcher (24/11/2026, comme dans les jeux).
+var course: bool = true
+## À ski : schuss (bouton SCHUSS ou Maj tenue) ; distinct de la course, sinon on partait en schuss par défaut.
+var schuss: bool = false
 ## Course du pilote (mode BOUCLE) en suivant `chemin` : il court quand
 ## l'embarquement est ouvert (retour d'utilisateur, 11/10/2026 : « il ne court pas s'il
 ## est en retard »).
@@ -825,9 +828,11 @@ func _process_corps(delta: float) -> void:
 	# « sur le programme PC, c'est la galère entre les touches, la souris
 	# et la vue, le skieur ne va pas où il faut »)
 	_maj_pouce(delta, entree if k.length() == 0.0 else Vector2.ZERO)
-	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
-		or (touches_ext & 16) != 0 or entree.length() > 0.92     # joystick à fond : on court
+	var maj: bool = Input.is_physical_key_pressed(KEY_SHIFT) or (touches_ext & 16) != 0
+	# à pied : course par défaut, Maj inverse (marcher) ; joystick à fond : on court ; à ski : SCHUSS ou Maj
+	var vite: bool = (course != maj) or entree.length() > 0.92
 	if chausse:
+		vite = schuss or maj or entree.length() > 0.92
 		if not chemin.is_empty():
 			if pilote_expert:
 				cmd = _pilote_expert()
@@ -978,13 +983,84 @@ var _avance_moy: float = 0.0
 var _marche_t: float = 0.0
 
 
+## À la course (16 km/h depuis le 24/11/2026), le pas de physique est découpé : 7 cm par image, il ne montait plus
+## l'escalier de la gare (0,6 m sur 1,9, bench_conduite) — la marche est détectée pas à pas, comme à 1,45 m/s.
+var _frac_pas: float = 1.0        # part du pas du moteur faite par ce sous-pas (move_and_slide prend le pas du moteur)
+## La course à 16 km/h, c'est dehors, sur le relief ; sur un sol bâti (gares, quais, escaliers, cabines) on court à
+## l'allure d'avant : lancé à 16 km/h contre le limon d'un escalier de gare, il glissait le long et passait à côté
+## (bench_conduite, 24/11/2026) — et on ne sprinte pas dans une gare.
+const V_COURSE_BATI: float = 3.3
+var sol_terrain: bool = true
+var nom_sol: String = ""             # (diagnostic : corps ou forme du sol touché)
+
+
+## Ouvrage devant (mur, escalier, quai, gare) dans les ~5 m : on ralentit AVANT d'y arriver, à l'allure du bâti
+## (demande d'utilisateur du 24/11/2026 : « réduis la vitesse de course aux endroits critiques et à leur approche »).
+var approche_bati: bool = false
+
+
+func _ouvrage_devant(dir: Vector3) -> bool:
+	if dir.length() < 0.05:
+		return false
+	var d: Vector3 = Vector3(dir.x, 0.0, dir.z).normalized() * (2.5 + V_COURSE * 0.6)
+	var espace: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	for h in [0.35, 1.2]:
+		var o: Vector3 = global_position + Vector3.UP * h
+		var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(o, o + d, collision_mask, [get_rid()])
+		var hit: Dictionary = espace.intersect_ray(rq)
+		if hit.is_empty():
+			continue
+		var co: CollisionObject3D = hit["collider"] as CollisionObject3D
+		if co == null or co.name == "SolAuMetre":
+			continue
+		var own: Object = co.shape_owner_get_owner(co.shape_find_owner(int(hit["shape"])))
+		if own != null and (own as Node).has_meta("relief"):
+			continue                   # (le relief qui monte devant : une pente, pas un ouvrage)
+		return true
+	return false
+
+
 func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
+	approche_bati = vite and sol_terrain and support == null and _ouvrage_devant(dir)
+	var n: int = clampi(ceili((V_COURSE if vite else V_MARCHE) * delta / 0.03), 1, 4)
+	_frac_pas = 1.0 / n
+	for _k in range(n):
+		_marcher_pas(delta / n, dir, vite)
+	_frac_pas = 1.0
+
+
+## Sol sous les pieds : le relief (dehors) ou un ouvrage (gare, escalier, quai…) ; gardé tant qu'on ne touche rien.
+func _lire_sol() -> void:
+	for ic in range(get_slide_collision_count()):
+		var c: KinematicCollision3D = get_slide_collision(ic)
+		if c.get_normal().y < 0.7:
+			continue
+		var o: Object = c.get_collider()
+		if o == null:
+			continue
+		nom_sol = String((o as Node).name)
+		if (o as Node).name == "SolAuMetre":
+			sol_terrain = true
+			return
+		var co: CollisionObject3D = o as CollisionObject3D
+		if co == null:
+			sol_terrain = false
+			return
+		var own: Object = co.shape_owner_get_owner(co.shape_find_owner(c.get_collider_shape_index()))
+		if own != null:
+			nom_sol += "/" + String((own as Node).name)
+		sol_terrain = own != null and (own as Node).has_meta("relief")
+		return
+
+
+func _marcher_pas(delta: float, dir: Vector3, vite: bool) -> void:
 	# (immobile sur le plancher du Funival, porté par son véhicule : pas de pas de physique — le sol en gradins, vu de la
 	# capsule inclinée, le faisait glisser vers les portes ouvertes et il restait sur le quai — 09/11/2026)
 	if support != null and support.has_meta("funival") and dir.length() < 0.05 and is_on_floor():
 		velocity = Vector3.ZERO
 		return
-	var v_cible: Vector3 = dir * (V_COURSE if vite else V_MARCHE)
+	var v_cible: Vector3 = dir * ((V_COURSE if sol_terrain and support == null and not approche_bati else V_COURSE_BATI)
+		if vite else V_MARCHE)
 	var vh: Vector3 = Vector3(velocity.x, 0.0, velocity.z).move_toward(v_cible, ACCEL * delta)
 	velocity.x = vh.x
 	velocity.z = vh.z
@@ -993,7 +1069,10 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 	else:
 		velocity.y -= G * delta
 	var avant: Vector3 = global_position
+	velocity *= _frac_pas
 	move_and_slide()
+	velocity /= _frac_pas
+	_lire_sol()
 	# contremarche : bloqué par un « mur » alors qu'on avance → monter
 	var fait: Vector3 = global_position - avant
 	fait.y = 0.0
@@ -1005,7 +1084,9 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 		var net: Vector3 = global_position - _pos_marche_prec
 		net.y = 0.0
 		_avance_moy = lerpf(_avance_moy, net.dot(voulu.normalized()) / maxf(delta, 1e-3), minf(1.0, delta * 4.0))
-		if _avance_moy < 0.25 * v_cible.length() and _marche_t > 0.4:
+		# (seuil plafonné : à la course, 16 km/h, les marches ralentissent au-delà du quart de la vitesse et il
+		# « contournait » l'escalier au lieu de le monter — 24/11/2026)
+		if _avance_moy < minf(0.25 * v_cible.length(), 0.5) and _marche_t > 0.4:
 			_contourner(voulu, _normale_obstacle())
 		_marche_t += delta
 	else:
@@ -1165,6 +1246,44 @@ func _corps_enfonce() -> bool:
 	q.collision_mask = collision_mask
 	q.exclude = [get_rid()]
 	return not get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty()
+
+
+## Dans quelque chose : la capsule touche dès qu'on la bouge de 5 cm, de tous côtés (un mur d'un seul côté n'y suffit pas).
+func enferme() -> bool:
+	var xf: Transform3D = global_transform.translated(Vector3.UP * 0.08)
+	for d in [Vector3(0.05, 0, 0), Vector3(-0.05, 0, 0), Vector3(0, 0, 0.05), Vector3(0, 0, -0.05), Vector3.UP * 0.05]:
+		if not test_move(xf, d):
+			return false
+	return true
+
+
+## Place libre au niveau du sol (au plus `haut_max` au-dessus du relief : quai, neige ; pas un toit), la plus proche,
+## dans `rayon` m ; Vector3.INF si aucune.
+func place_au_sol(relief: Node, haut_max: float, rayon: float) -> Vector3:
+	var p: Vector3 = global_position
+	var espace: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	for r in [0.0, 1.5, 3.0, 4.5, 6.0, 8.0, 10.0, 13.0, 16.0, 20.0, 25.0, 30.0]:
+		if r > rayon:
+			break
+		var n: int = 1 if r == 0.0 else 16
+		for k in range(n):
+			var a: float = k * TAU / n
+			var x: float = p.x + cos(a) * r
+			var z: float = p.z + sin(a) * r
+			var g: float = float(relief.call("hauteur_sol", x, z))
+			# (le rayon part SOUS le plafond admis : un toit plus haut n'est jamais vu)
+			var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+				Vector3(x, g + haut_max, z), Vector3(x, g - 1.0, z), collision_mask, [get_rid()])
+			rq.hit_back_faces = true
+			var h: Dictionary = espace.intersect_ray(rq)
+			if h.is_empty() or (h["normal"] as Vector3).y < 0.7:
+				continue
+			var sur: Vector3 = (h["position"] as Vector3) + Vector3.UP * 0.05
+			var xf: Transform3D = Transform3D(global_transform.basis, sur + Vector3.UP * 0.08)
+			if not test_move(xf, Vector3.UP * 0.01) and not test_move(xf, Vector3(0.05, 0.0, 0.0)) \
+					and not test_move(xf, Vector3(-0.05, 0.0, 0.0)) and not test_move(xf, Vector3(0.0, 0.0, 0.05)):
+				return sur
+	return Vector3.INF
 
 
 func _place_libre() -> Vector3:

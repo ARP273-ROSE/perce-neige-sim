@@ -30,6 +30,8 @@ var plafonds: PackedVector3Array = PackedVector3Array() # plafonniers des quais 
 ## (retour d'utilisateur du 21/11/2026, iPad, gare du 3S la nuit : « l'intérieur blafard » — une gare ouverte n'est
 ## pas un bâtiment pour le relief, le skieur y était « dehors », sous la lumière grise de la nuit).
 var gares: Array = []
+## Niveau d'éclairage de nuit en cours (0 à 1), lu par les commandes des véhicules (éclairage forcé à la main).
+static var niveau_courant: float = 0.0
 
 
 ## Vrai si `p` (monde) est sous le toit d'une gare de remontée.
@@ -158,8 +160,12 @@ func construire(r: ReliefBuilder, rm: RemonteesDomaine) -> void:
 
 
 ## Niveau d'éclairage (0..1, CycleJour « eclairage ») et caméra : allume, éteint, place les vraies lumières.
-func regler(n: float, cam_pos: Vector3, dt: float, support: Node3D = null, tete: Vector3 = Vector3.ZERO) -> void:
+func regler(n: float, cam_pos: Vector3, dt: float, support: Node3D = null, tete: Vector3 = Vector3.ZERO,
+		n_plafond: float = -1.0) -> void:
 	niveau = n
+	niveau_courant = n
+	# (plafonnier de la cabine où l'on est : la nuit, ou allumé / éteint à la main — commande ÉCLAIRAGE, 24/11/2026)
+	var np: float = n if n_plafond < 0.0 else n_plafond
 	var dedans: bool = support != null or dans_rame
 	if dedans != _dedans:
 		_dedans = dedans
@@ -178,7 +184,7 @@ func regler(n: float, cam_pos: Vector3, dt: float, support: Node3D = null, tete:
 		for l in _lumieres:
 			(l as Node).queue_free()
 		_lumieres.clear()
-		_regler_plafonnier(null, 0.0, tete)
+		_regler_plafonnier(support, np, tete)
 		return
 	_t_choix -= dt
 	if _t_choix <= 0.0:
@@ -186,7 +192,7 @@ func regler(n: float, cam_pos: Vector3, dt: float, support: Node3D = null, tete:
 		_choisir(cam_pos)
 	for l in _lumieres:
 		(l as OmniLight3D).light_energy = 2.2 * n
-	_regler_plafonnier(support, n, tete)
+	_regler_plafonnier(support, np, tete)
 
 
 func _choisir(cam_pos: Vector3) -> void:

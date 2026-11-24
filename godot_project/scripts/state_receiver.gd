@@ -33,6 +33,8 @@ var _retour: PacketPeerUDP = null
 var _last_skieur: int = -1
 var _last_skieur_vue: int = -1
 var _last_skieur_ski: int = -1
+var _last_skieur_carte: int = -1
+var _last_skieur_cmd: int = -1
 var _last_skieur_evac: int = -1
 var _last_skieur_auto: int = -1
 var _last_vue_ligne: int = -1
@@ -365,12 +367,26 @@ func _apply(d: Dictionary) -> void:
 			main.skieur_externe(sk == 1)
 	if main != null and main.get("skieur") != null:
 		main.skieur.touches_ext = _i(d, "skieur_touches", 0)
-	# chausser / déchausser (touche E du PC en mode skieur) : compteur
+	# AGIR (touche E du PC en mode skieur : chausser, piloter, échelle, corde, évacuer…) : compteur
 	var ns: int = _i(d, "skieur_ski", 0)
 	if ns != _last_skieur_ski:
-		if _last_skieur_ski >= 0 and main != null and main.has_method("basculer_ski"):
-			main.basculer_ski()
+		if _last_skieur_ski >= 0 and main != null and main.has_method("agir"):
+			main.agir()
 		_last_skieur_ski = ns
+	# M : carte des pistes
+	var nc: int = _i(d, "skieur_carte", 0)
+	if nc != _last_skieur_carte:
+		if _last_skieur_carte >= 0 and main != null and main.get("commandes_skieur") != null:
+			main.commandes_skieur.basculer_carte()
+		_last_skieur_carte = nc
+	# H / C / K : phares, éclairage, klaxon du véhicule où l'on est
+	var cmd_v: Variant = d.get("skieur_cmd")
+	if cmd_v is Array and (cmd_v as Array).size() >= 2:
+		var ncv: int = int((cmd_v as Array)[0])
+		if ncv != _last_skieur_cmd:
+			if _last_skieur_cmd >= 0 and main != null and main.has_method("commande_vehicule"):
+				main.commande_vehicule(String((cmd_v as Array)[1]))
+			_last_skieur_cmd = ncv
 	# issues de secours (touche I du PC en mode skieur) : compteur
 	var ne: int = _i(d, "skieur_evacuer", 0)
 	if ne != _last_skieur_evac:

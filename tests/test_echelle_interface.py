@@ -187,8 +187,8 @@ def test_ecran_dans_le_journal_au_premier_trajet(jeu):
     g.new_trip()
     lignes = [e.message_fr for e in g.state.events if e.key == "screen"]
     assert lignes and lignes[0].startswith("Écran ") and "interface à" in lignes[0]
-    # place insuffisante → la ligne propose le plein écran
-    assert "F11" in lignes[0]
+    # place insuffisante → la ligne propose d'agrandir la fenêtre (F11 retiré le 24/11/2026)
+    assert "agrandir la fenêtre" in lignes[0]
 
 
 def test_changement_d_ecran_vu_en_direct(jeu):
@@ -201,13 +201,11 @@ def test_changement_d_ecran_vu_en_direct(jeu):
     assert sum(1 for e in g.state.events if e.key == "screen") == n + 1
 
 
-def test_plein_ecran_f11(jeu):
+def test_f11_retire(jeu):
+    """F11 (plein écran du poste) retiré le 24/11/2026 : seul F12 passe la vue 3D en plein écran."""
     app, win, g = jeu
     win.showMaximized()
     app.processEvents()
     QTest.keyClick(g, Qt.Key.Key_F11)
     app.processEvents()
-    assert win.isFullScreen() and pn._lire_prefs().get("plein_ecran") is True
-    QTest.keyClick(g, Qt.Key.Key_F11)
-    app.processEvents()
-    assert not win.isFullScreen() and pn._lire_prefs().get("plein_ecran") is False
+    assert not win.isFullScreen()

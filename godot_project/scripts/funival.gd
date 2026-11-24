@@ -2409,7 +2409,9 @@ func _placer(i: int) -> void:
 	(v as VehiculeFunival).tourner_roues(s_de_d(d) if not _s_par_m.is_empty() else d)
 	# phares vers l'avant du mouvement ; à quai, vers la ligne
 	var monte: bool = (_v * (1.0 if i == 0 else -1.0)) > 0.05 or (absf(_v) <= 0.05 and zone_vehicule(i) == "gare_aval")
-	(v as VehiculeFunival).phares(monte, zone_vehicule(i) == "ligne" or absf(_v) <= 0.05)
+	# (PHARES du pupitre : allumés ou éteints à la main, sinon automatiques, 24/11/2026)
+	var pf: int = exploitation().phares_force
+	(v as VehiculeFunival).phares(monte, (zone_vehicule(i) == "ligne" or absf(_v) <= 0.05) if pf < 0 else pf == 1)
 	if collisions_actives and i < _corps.size() and _corps[i] != null:
 		(_corps[i][0] as Node3D).transform = Transform3D(b, p)
 		for cs in _corps[i][1]:
@@ -2556,6 +2558,44 @@ func sous_la_roche(p: Vector3) -> bool:
 
 
 ## Le point p (monde) est dans la caisse d'un véhicule : le skieur y est porté, la ligne doit tourner à pleine cadence, collisions comprises.
+## Phares allumés (au moins un véhicule) : état du bouton PHARES du pupitre.
+func phares_allumes() -> bool:
+	for e in _vehicules:
+		if is_instance_valid(e[0]) and (e[0] as VehiculeFunival).phares_visibles():
+			return true
+	return false
+
+
+## KLAXON du pupitre : le véhicule le plus proche de la caméra (celui où l'on est).
+var _klaxon: AudioStreamPlayer3D = null
+
+
+func klaxonner() -> void:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var meilleur: Node3D = null
+	var d_min: float = INF
+	for e in _vehicules:
+		var v: Node3D = e[0]
+		if is_instance_valid(v):
+			var d: float = v.global_position.distance_to(cam.global_position) if cam != null else 0.0
+			if d < d_min:
+				d_min = d
+				meilleur = v
+	if meilleur == null:
+		return
+	if _klaxon == null:
+		_klaxon = AudioStreamPlayer3D.new()
+		_klaxon.name = "Klaxon"
+		_klaxon.stream = load("res://sounds/klaxon.wav")
+		_klaxon.unit_size = 25.0
+		_klaxon.max_distance = 600.0
+	if _klaxon.get_parent() != meilleur:
+		if _klaxon.get_parent() != null:
+			_klaxon.get_parent().remove_child(_klaxon)
+		meilleur.add_child(_klaxon)
+	_klaxon.play()
+
+
 func skieur_dedans(p: Vector3) -> bool:
 	if not pret:
 		return false

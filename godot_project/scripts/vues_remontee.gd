@@ -156,6 +156,13 @@ func _process(delta: float) -> void:
 	# on vise le skieur, assis ou accroché : le nœud du véhicule peut être
 	# figé par le niveau de détail (MultiMesh) alors que le skieur, lui, suit
 	var cible: Vector3 = skieur.global_position + Vector3(0, 0.6, 0)
+	# assis dans une cabine ou sur un siège : le point visé est sa place, véhicule au repos (sans le balancement)
+	var rm_c: Node = main.get("remontees")
+	var ab_c: Array = rm_c.get("a_bord") if rm_c != null else []
+	if ab_c.size() >= 5 and ab_c.size() <= 5 and ab_c[0] == lg:
+		var vr: VehiculeRemontee = lg.vehicule(int(ab_c[1]))
+		if vr != null and vr.has_method("vers_monde_repos"):
+			cible = vr.vers_monde_repos(vr.place_assise(ab_c[2], ab_c[4])) + Vector3(0, 0.6, 0)
 	# sens de marche : par différence de positions (le véhicule peut être sur
 	# le brin montant ou descendant), repli sur l'axe de la ligne
 	var axe: Vector3 = -lg.global_basis.z

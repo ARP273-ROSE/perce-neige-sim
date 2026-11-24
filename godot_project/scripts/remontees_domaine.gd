@@ -1514,6 +1514,21 @@ func funival_ou(p: Vector3, dans_rame_seulement: bool = false) -> LigneRemontee:
 	return null
 
 
+## Remontée et véhicule où se trouve le skieur (assis, debout dans sa cabine, ou dans le Funival) : [ligne, indice]
+## (indice −1 : tout le Funival), sinon []. Sert aux commandes du véhicule (phares, éclairage, klaxon : celles du
+## véhicule où l'on est, pas celles du Perce-Neige, demande d'utilisateur du 24/11/2026).
+func vehicule_du_skieur() -> Array:
+	if not a_bord.is_empty():
+		return [a_bord[0], int(a_bord[1])]
+	for t in [_reste_cabine, _sortie_cabine]:
+		if not (t as Array).is_empty() and is_instance_valid((t as Array)[0]):
+			return [(t as Array)[0], int((t as Array)[1])]
+	var fu: Funival = Funival.actif if Funival.actif != null and is_instance_valid(Funival.actif) else null
+	if skieur != null and fu != null and fu.skieur_dedans(skieur.global_position):
+		return [fu, -1]
+	return []
+
+
 func ligne_courante(p: Vector3) -> LigneRemontee:
 	if not a_bord.is_empty():
 		return a_bord[0]

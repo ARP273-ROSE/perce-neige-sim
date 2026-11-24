@@ -1799,11 +1799,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
 		# K dans la PWA ; F9 dans la vue 3D du PC (K y est le klaxon)
-		if event.keycode == (KEY_F9 if client_mode else KEY_K):
+		# F9 partout ; K aussi dans la PWA pour ENTRER en skieur (en skieur, K est le klaxon du véhicule où l'on est)
+		if event.keycode == KEY_F9 or (not client_mode and not mode_skieur and event.keycode == KEY_K):
 			basculer_skieur()
 			return
 		if mode_skieur and event.keycode == KEY_E:
-			basculer_ski()
+			agir()
+			return
+		if mode_skieur and event.keycode == KEY_M and commandes_skieur != null:
+			commandes_skieur.basculer_carte()       # M : carte, comme dans les jeux
+			return
+		if mode_skieur and event.keycode in [KEY_H, KEY_C, KEY_K]:
+			commande_vehicule({KEY_H: "phares", KEY_C: "eclairage", KEY_K: "klaxon"}[event.keycode])
 			return
 		if mode_skieur and event.keycode == KEY_G:
 			basculer_echelle()
@@ -2163,6 +2170,7 @@ func _poser_sur_gare() -> void:
 			_remonter_skieur()
 		# (les gares voisines viennent de se construire : l'une d'elles peut enfermer la caméra)
 		if _t_depose <= 0.0:
+			_assainir_depose()
 			_regard_libre(true)
 	var lg: LigneRemontee = _depose_remontee
 	if lg == null or not is_instance_valid(lg) or not lg.pret or skieur == null:
@@ -2170,6 +2178,7 @@ func _poser_sur_gare() -> void:
 	_depose_remontee = null
 	_t_depose = 10.0
 	_remonter_skieur()
+	_assainir_depose()
 	_regard_libre()
 
 
@@ -2276,6 +2285,37 @@ func _boites_sous(n: Node, p: Vector3, o: Array) -> void:
 		_boites_sous(c, p, o)
 
 
+## Dernier contrôle d'une téléportation (retour d'utilisateur du 24/11/2026 : « quand je me téléporte, j'atterris
+## souvent dans un mur ou sur un toit ») : la gare et ses voisines construites, si le skieur est DANS quelque chose
+## (capsule en contact de tous côtés) ou PERCHÉ (plus de 2,5 m au-dessus du relief : toit, auvent, haut d'un mur), il
+## est reposé à la place libre la plus proche, au niveau du sol (quai ou neige), dans 30 m.
+const PERCHE_MAX: float = 2.5
+
+
+func _assainir_depose() -> void:
+	if skieur == null or relief == null or skieur.embarque or skieur.support != null:
+		return
+	var p: Vector3 = skieur.global_position
+	# (il a déjà marché depuis la dépose — sur le pont du Funival, dans une gare en hauteur : c'est lui, on n'y touche pas)
+	if _point_depose != Vector3.ZERO and Vector2(p.x - _point_depose.x, p.z - _point_depose.z).length() > REGARD_ECART_MAX:
+		return
+	var perche: bool = p.y - relief.hauteur_sol(p.x, p.z) > PERCHE_MAX
+	var dedans: bool = skieur.enferme()
+	if not perche and not dedans:
+		return
+	var q: Vector3 = skieur.place_au_sol(relief, PERCHE_MAX, 30.0)
+	if q == Vector3.INF:
+		return
+	if collisions != null:
+		collisions.assurer_autour(q)
+	skieur.global_position = q
+	skieur.velocity = Vector3.ZERO
+	skieur.refuge = q
+	skieur.dernier_sol = q
+	_point_depose = q
+	print("[Dépose] %s : reposé %.1f m plus loin, au sol" % ["perché" if perche else "dans un mur", Vector2(q.x - p.x, q.z - p.z).length()])
+
+
 func _remonter_skieur() -> void:
 	var p: Vector3 = skieur.global_position
 	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
@@ -2299,6 +2339,70 @@ func _remonter_skieur() -> void:
 ## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
 ## Échelle du pylône voisin (bouton GRIMPER, touche G), à pied : monte jusqu'en haut ;
 ## sur l'échelle, repart dans l'autre sens ; arrivé en bas, on lâche.
+## E : AGIR, comme dans les jeux (24/11/2026) — l'action qui a un sens là où l'on est, dans l'ordre : lâcher la perche,
+## prendre les commandes (Perce-Neige, va-et-vient), descendre à la corde, évacuer la rame, l'échelle, chausser.
+## Les anciennes touches (G, U) restent.
+func agir() -> void:
+	if skieur == null or not mode_skieur:
+		return
+	if remontees != null and remontees.sur_perche():
+		basculer_ski()
+		return
+	var cs: CommandesSkieur = commandes_skieur
+	if cs != null and cs.pilotage_possible():
+		piloter()
+		return
+	if remontees != null and remontees.corde_possible():
+		remontees.descendre_corde()
+		return
+	if evacuation_possible():
+		evacuer()
+		return
+	if skieur.sur_echelle() or (not skieur.chausse and remontees != null and not skieur.embarque
+			and remontees.echelle_proche(skieur.global_position) != null):
+		basculer_echelle()
+		return
+	basculer_ski()
+
+
+## PILOTER : prendre les commandes — au poste du Perce-Neige, on s'y assoit et on conduit ; à bord d'un va-et-vient
+## (Funival, téléphériques), son pupitre passe en manuel et s'ouvre (« S'ASSEOIR n'est pas clair », 24/11/2026).
+func piloter() -> void:
+	if commandes_skieur != null and commandes_skieur.conduite_pn:
+		skieur.conduite_demandee.emit()
+		return
+	var lg: LigneRemontee = commandes_skieur.ligne_pilotable() if commandes_skieur != null else null
+	if lg == null:
+		return
+	lg.exploitation().commande("mode", "manuel")
+	commandes_skieur.ouvrir_poste()
+	commandes_skieur.message("Aux commandes : " + lg.nom_ligne + " (mode manuel)", 3.0)
+
+
+## Commande du véhicule où l'on est (H phares, C éclairage, K klaxon ; boutons du pupitre) : la remontée où l'on est,
+## sinon le Perce-Neige si l'on y est, sinon rien (24/11/2026 : « pas le Perce-Neige quand je n'y suis pas »).
+func commande_vehicule(nom: String) -> void:
+	var vs: Array = remontees.vehicule_du_skieur() if remontees != null else []
+	if not vs.is_empty():
+		var r: String = (vs[0] as LigneRemontee).exploitation().commande(nom)
+		if r != "" and commandes_skieur != null:
+			commandes_skieur.message(r, 2.5)
+		return
+	if skieur_au_perce_neige():
+		var t: String = {"phares": "H", "eclairage": "C", "klaxon": "K"}.get(nom, "")
+		if client_mode:
+			if state_receiver != null and t != "":
+				state_receiver.envoyer({"touche": t})
+		elif nom == "eclairage":
+			toggle_cabin_lights()
+		elif nom == "phares" and has_method("toggle_headlights"):
+			call("toggle_headlights")
+		return
+	if commandes_skieur != null:
+		commandes_skieur.message({"phares": "Pas de phares ici", "eclairage": "Pas d'éclairage à commander ici",
+			"klaxon": "Pas de klaxon ici"}.get(nom, ""), 2.0)
+
+
 func basculer_echelle() -> void:
 	if skieur == null or not mode_skieur or remontees == null:
 		return
@@ -3468,7 +3572,12 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 	var ecl: float = etat_jour["eclairage"]
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var pc: Vector3 = cam.global_position if cam != null else Vector3.ZERO
-	if eclairages_nuit == null and ecl > 0.0 and remontees != null and remontees.pret:
+	# éclairage intérieur forcé à la main (ÉCLAIRAGE du pupitre, véhicule où l'on est ; Funival à part)
+	var vs_ecl: Array = remontees.vehicule_du_skieur() if remontees != null and remontees.pret and mode_skieur else []
+	var n_plaf: float = (vs_ecl[0] as LigneRemontee).exploitation().eclairage_effectif(ecl) if not vs_ecl.is_empty() else -1.0
+	var fu_ecl: Funival = Funival.actif if Funival.actif != null and is_instance_valid(Funival.actif) else null
+	var n_funi: float = fu_ecl.exploitation().eclairage_effectif(ecl) if fu_ecl != null else ecl
+	if eclairages_nuit == null and (ecl > 0.0 or n_plaf > 0.0 or n_funi > 0.0) and remontees != null and remontees.pret:
 		eclairages_nuit = EclairagesNuit.new()
 		add_child(eclairages_nuit)
 		eclairages_nuit.construire(relief, remontees)
@@ -3483,8 +3592,8 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 		eclairages_nuit.dans_rame = remontees != null and (remontees.funival_ou(pc, true) != null
 			or (skieur != null and remontees.funival_ou(skieur.global_position + Vector3(0, 1.0, 0), true) != null)) \
 			or (skieur != null and eclairages_nuit.sous_un_toit(skieur.global_position + Vector3(0, 1.0, 0)))
-		eclairages_nuit.regler(ecl if mode_skieur else 0.0, pc, delta, sup2, tete)
-		eclairages_nuit.regler_funival(ecl if mode_skieur else 0.0)
+		eclairages_nuit.regler(ecl if mode_skieur else 0.0, pc, delta, sup2, tete, n_plaf if mode_skieur else -1.0)
+		eclairages_nuit.regler_funival(n_funi if mode_skieur else 0.0)
 	var damage: bool = mode_skieur and CycleJour.heure_damage(HeureJeu.heure())
 	if dameuses == null and damage and domaine != null and domaine.pret:
 		dameuses = Dameuses.new()

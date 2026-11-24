@@ -808,6 +808,15 @@ func balancement_monde() -> Basis:
 
 ## Point du repère du véhicule (au repos) porté par la partie suspendue,
 ## en coordonnées monde (suit le balancement).
+## Comme vers_monde, mais la cabine AU REPOS, sans son balancement : le point que vise la caméra orbitale (elle suivait
+## le skieur, qui balance avec la cabine, et tout le décor — câbles compris — semblait osciller : vidéo iPad du
+## 24/11/2026, Olympique). Le balancement reste visible : c'est la cabine qui bouge dans l'image, pas le monde.
+func vers_monde_repos(p: Vector3) -> Vector3:
+	if _susp == null:
+		return global_transform * p
+	return global_transform * (_susp.position + (p - pivot))
+
+
 func vers_monde(p: Vector3) -> Vector3:
 	if _susp == null:
 		return global_transform * p

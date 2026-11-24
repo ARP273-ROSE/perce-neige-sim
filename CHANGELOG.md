@@ -7,6 +7,49 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Prochaine version (non publiée)
 
+- **Câbles qui « oscillent » en vue orbitale** (vidéo iPad du 24/11/2026, Olympique 3S : « on avait réglé
+  l'oscillation des câbles, c'est revenu ») : mesuré sur la vidéo, le câble montait et descendait de ~50 px à
+  l'écran, le chariot restant posé dessus et la cabine immobile dans l'image — c'est la cabine qui balançait sous
+  son chariot, et la caméra orbitale, qui visait le skieur assis, suivait ce balancement : tout le décor bougeait.
+  Elle vise désormais sa place, cabine AU REPOS (`VehiculeRemontee.vers_monde_repos`) : le monde reste fixe, c'est
+  la cabine qu'on voit balancer.
+- **Téléportation dans un mur ou sur un toit** : dernier contrôle une fois la gare et ses voisines construites — si
+  le skieur est enfermé dans le décor ou perché à plus de 2,5 m au-dessus du relief, il est reposé à la place libre
+  la plus proche au niveau du sol (30 m au plus). Banc `bench_depose_3d.gd` : toutes les remontées.
+- **Course ralentie aux endroits critiques et à leur approche** : 16 km/h sur la neige ; dès qu'un ouvrage (mur,
+  escalier, quai, gare, pylône) est à ~5 m devant, ou sur un sol bâti, 3,3 m/s.
+- **Un seul jeu cohérent (audit d'intégration du 24/11/2026)** — « c'est encore trop split entre le pilotage du
+  Perce-Neige et tout le reste » :
+  - **commandes du véhicule où l'on est** : PHARES, ÉCLAIRAGE, KLAXON (touches H, C, K ; boutons au pupitre de la
+    remontée, à bord seulement) agissent sur le Funival, la cabine ou le téléphérique où l'on est, et sur le
+    Perce-Neige seulement si l'on y est. Ce qui a un sens : Funival phares + éclairage + klaxon (le sien) ;
+    téléphériques, télécabines et 3S éclairage intérieur ; télésièges et téléskis rien (refus expliqué). Allumé ou
+    éteint à la main, sinon automatique la nuit ;
+  - **PILOTER** (ex-S'ASSEOIR, peu clair) : au poste du Perce-Neige on s'assoit et on conduit ; à bord du Funival ou
+    d'un téléphérique, son pupitre passe en manuel et s'ouvre ;
+  - **touches des jeux** : E = agir (lâcher la perche, piloter, corde, évacuer, échelle, chausser, selon l'endroit ;
+    G et U restent), M = carte, V = caméra, Tab = pupitre, F9 = mode skieur / conduite ;
+  - **courir par défaut à 16 km/h** dehors, sur le relief (3,3 m/s avant ; Maj pour marcher) ; sur un sol bâti
+    (gares, quais, escaliers) on court à 3,3 m/s comme avant — lancé à 16 km/h contre le limon d'un escalier, il
+    glissait à côté (bench_conduite) ; le pas de physique est découpé à la course ; à ski, le schuss reste à part
+    (bouton SCHUSS ou Maj tenue) ;
+  - **PC : la vue 3D plein écran est la vue par défaut**, en conduite comme en skieur ; le poste complet du
+    Perce-Neige (vue en plan, profil, machinerie, journal) s'ouvre par F12 ou POSTE PN et se referme par F12,
+    Échap ou VUE 3D ;
+  - **PWA alignée** : MODE SKIEUR, ÉCLAIRAGE (ex-CABINE), CAMÉRA (ex-VUE), PUPITRE (ex-POSTE), PARTIE NORMALE /
+    DÉFI / PANNES (ex-MODE …, « mode » désignant désormais skieur / conduite) ;
+  - bancs : `bench_commandes_vehicule_3d.gd` ; tests : `tests/test_integration_jeu.py`.
+- **Boutons du PC, audit du 24/11/2026** (« en haut à gauche ils n'ont pas la même forme qu'à droite, les noms
+  ne sont pas clairs ») :
+  - la barre du PC (haut gauche) est dessinée exactement comme la colonne de la 3D (170 × 64, liseré bleu,
+    police 20, un seul libellé ; le raccourci est dans l'info-bulle) ;
+  - **F11 et PLEIN ÉCRAN retirés** : la vue 3D plein cadre est toujours en plein écran ; F12 (ou le nouveau bouton
+    **VUE 3D ⤢** du poste, qui manquait : seul le retour avait un bouton) y entre, F12 ou Échap en sort ;
+  - noms : ÉCRANS → POSTE PN, SKIEUR / CONDUIRE (F9) → MODE SKIEUR / MODE CONDUITE, CONDUIRE (rame) → S'ASSEOIR,
+    EXPLOIT. → SERVICE AUTO (aussi au tableau de bord de la PWA), RÉSEAU → MULTIJOUEUR, HEURE → HEURE DU JEU,
+    1re / 3e PERS. → CAMÉRA (l'info-bulle dit laquelle), QUITTER (PWA) → MODE CONDUITE ; info-bulles réécrites ;
+  - BOUCLE retirée de l'écran (le code et la touche B restent) ;
+  - relevés de fluidité automatiques : 5 par jour au plus au lieu de 5 par version (réguliers).
 - **PC, interface de la vue 3D à la taille de l'écran** (« sur un 4K 32" les boutons sont énormes ») : la toile de
   1600 × 900 étirée donnait des boutons de près de 3 cm. Le PC calcule, d'après la densité physique de l'écran, un
   facteur (0,5 à 1) pour qu'un bouton du HUD fasse ~12 mm ; la 3D l'applique (`content_scale_factor`), la barre de
