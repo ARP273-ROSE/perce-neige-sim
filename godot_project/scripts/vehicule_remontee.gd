@@ -58,7 +58,7 @@ func rouler(ds: float) -> void:
 	if _galets_roul.is_empty() or ds == 0.0:
 		return
 	for g in _galets_roul:
-		(g as Node3D).rotate_object_local(Vector3.RIGHT, -ds / R_GALET_CHARIOT)
+		(g as Node3D).rotate_object_local(Vector3.RIGHT, -ds / float(g.get_meta("r", R_GALET_CHARIOT)))
 var _ressort_l0: float = 0.32
 var _gc: Node3D
 ## Véhicule posé en miroir sur sa ligne (ligne qui monte à gauche) : les
@@ -2233,6 +2233,17 @@ func _paire_tph(ch: Node3D, x: float, z: float, e: float) -> Node3D:
 	return n
 
 
+## Galet de chariot de téléphérique, dans un nœud qui tourne (rouler) : celui du funiculaire, à rayons.
+func _galet_tph(pere: Node3D, c: Vector3, r: float) -> void:
+	var gn: Node3D = Node3D.new()
+	gn.name = "GaletChariot"
+	gn.position = c
+	gn.set_meta("r", r)
+	pere.add_child(gn)
+	RemonteeKit.galet(gn, Vector3.ZERO, r)
+	_galets_roul.append(gn)
+
+
 ## Pose des balanciers (repère du chariot) ; vide = chariot droit.
 func articuler_paires_tph(poses: Array) -> void:
 	if poses.size() != _paires_tph.size():
@@ -2254,7 +2265,9 @@ func _cabine_tph() -> void:
 	# Grande Motte (photo d'utilisateur du 11/11/2026, chariot vu d'en dessous ; « 12 galets sur chaque câble
 	# porteur ») : par porteur, 6 paires de galets jumelés sur petits balanciers, longeron-caisson par rangée,
 	# vérin le long du longeron extérieur, projecteur en bout.
-	var rg: float = 0.20 if fornet else 0.17
+	# rayon au fond de la gorge ; joues à 1,28 r (RollerMesh) : Ø hors joues 0,31 / 0,26 m pour 0,42 / 0,37 m
+	# d'entraxe (retour d'utilisateur du 24/11/2026 : « leur diamètre est trop grand, elles se touchent »)
+	var rg: float = 0.12 if fornet else 0.10
 	var n_g: int = 12
 	var pas: float = 0.40 if fornet else 0.37
 	var lr: float = (n_g / 2 * 0.84 + 0.3) if fornet else (n_g / 2 * 0.74 + 0.3)     # longueur d'une rangée
@@ -2271,7 +2284,7 @@ func _cabine_tph() -> void:
 				var zpf: float = (kpf - (n_pf - 1) * 0.5) * 0.84
 				var pf: Node3D = _paire_tph(ch, sx * xr, zpf, 0.42)
 				for sjf in [-1.0, 1.0]:
-					RemonteeKit.galet(pf, Vector3(0, rg + PyloneRemontee.R_CABLE, sjf * 0.21), rg)
+					_galet_tph(pf, Vector3(0, rg + PyloneRemontee.R_CABLE, sjf * 0.21), rg)
 				for sfl in [-1.0, 1.0]:
 					RemonteeKit.boite_en(pf, Vector3(0.03, 0.20, 0.74), Vector3(sfl * 0.10, rg + PyloneRemontee.R_CABLE, 0), "cabine_rouge")
 				RemonteeKit.cylindre(pf, 0.07, 0.07, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, rg + PyloneRemontee.R_CABLE + 0.02, 0)), "acier", 10)
@@ -2281,7 +2294,7 @@ func _cabine_tph() -> void:
 				var zp0: float = (kp - (n_p - 1) * 0.5) * 0.74
 				var pg: Node3D = _paire_tph(ch, sx * xr, zp0, 0.37)
 				for sj2 in [-1.0, 1.0]:
-					RemonteeKit.galet(pg, Vector3(0, rg + PyloneRemontee.R_CABLE, sj2 * 0.185), rg)
+					_galet_tph(pg, Vector3(0, rg + PyloneRemontee.R_CABLE, sj2 * 0.185), rg)
 				# balancier de la paire, et son axe sur le longeron
 				RemonteeKit.boite_en(pg, Vector3(0.26, 0.10, 0.56), Vector3(0, rg + PyloneRemontee.R_CABLE + rg + 0.08, 0), gris)
 				RemonteeKit.cylindre(pg, 0.05, 0.05, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, rg + 0.34, 0)), "acier_noir", 8)

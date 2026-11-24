@@ -5538,6 +5538,7 @@ func _cable() -> void:
 	_enfant(c)
 	# câble à torons du funiculaire, au diamètre de la ligne, qui défile
 	_mat_cable = RemonteeKit.materiau_cable_tracteur(diametre_cable)
+	_mat_cable.set_shader_parameter("rayon_tube", diametre_cable * 0.0005)
 	if tricable():
 		# 3S : le tracteur passe sous les porteurs (la boucle suit le chariot)
 		for k in range(pts.size()):
@@ -5555,6 +5556,7 @@ func _cable() -> void:
 	var vs: PackedVector3Array = PackedVector3Array()
 	var ns: PackedVector3Array = PackedVector3Array()
 	var uvs: PackedVector2Array = PackedVector2Array()
+	var uv2s: PackedVector2Array = PackedVector2Array()
 	var i0: int = 0
 	while i0 < pts.size() - 1:
 		var i1: int = mini(i0 + 300, pts.size() - 1)
@@ -5562,6 +5564,7 @@ func _cable() -> void:
 		vs.append_array(ta[Mesh.ARRAY_VERTEX])
 		ns.append_array(ta[Mesh.ARRAY_NORMAL])
 		uvs.append_array(ta[Mesh.ARRAY_TEX_UV])
+		uv2s.append_array(RemonteeKit.uv2_accrochage(pts, 8, i0, i1))
 		i0 = i1
 		await _pause("câble")
 	var a: Array = []
@@ -5569,6 +5572,8 @@ func _cable() -> void:
 	a[Mesh.ARRAY_VERTEX] = vs
 	a[Mesh.ARRAY_NORMAL] = ns
 	a[Mesh.ARRAY_TEX_UV] = uvs
+	if uv2s.size() == vs.size():
+		a[Mesh.ARRAY_TEX_UV2] = uv2s
 	RemonteeKit.tube_de_tableaux(c, a, "cable", _mat_cable)
 
 
@@ -5829,6 +5834,7 @@ func _cavalier(parent: Node3D, x0: float, d: float, montee: bool, e: float, y_tr
 func _porteurs(parent: Node3D) -> void:
 	_mat_porteurs = RemonteeKit.materiau_cable_tracteur(57.0)
 	_mat_porteurs.set_shader_parameter("lisse", true)
+	_mat_porteurs.set_shader_parameter("rayon_tube", 0.0285)
 	var L: float = longueur_h()
 	# abscisses resserrées aux gares et aux sabots des pylônes, calculées une
 	# fois ; un tube par tranche (Olympique : 0,15 s d'un bloc, banc du 27/10/2026)
@@ -5858,7 +5864,9 @@ func _porteurs(parent: Node3D) -> void:
 			for i in range(ds.size()):
 				pts[i] = Vector3(x, ys[i], -ds[i])
 			pts[ds.size()] = Vector3(x, ys[ds.size()], -L)
-			RemonteeKit.tube(parent, pts, 0.0285, "cable", 8, _mat_porteurs)
+			var tp: Array = RemonteeKit.tube_tableaux(pts, 0.0285, 8)
+			tp[Mesh.ARRAY_TEX_UV2] = RemonteeKit.uv2_accrochage(pts, 8, 0, pts.size() - 1)
+			RemonteeKit.tube_de_tableaux(parent, tp, "cable", _mat_porteurs)
 			await _pause("câble : porteurs 3S")
 
 

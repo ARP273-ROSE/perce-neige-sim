@@ -28,6 +28,18 @@ public:
 	// grille que le résultat) ailleurs, raccordés. `capsules` : [ax, az, bx, bz, r0, r1, …] ;
 	// `rects` : [x0, z0, x1, z1, …], élargis d'un raccord `r1_rect`. Mailles à 25 m retouchées :
 	// écart de h à h0. Renvoie [altitudes, mailles fines, relief à 25 m recalé].
+	// Pistes damées (masque OSM sur l'emprise du relief, `largeur` px de large, 0-255) : le relevé y est lissé vers sa
+	// moyenne locale sur ± `rayon` m (relevé LiDAR sans neige : ornières, blocs, crevasses ; la neige damée les comble).
+	// Pris par raccorder ; vide : rien.
+	PackedByteArray masque_pistes;
+	int masque_largeur = 0;
+	double rayon_lisse = 0.0;
+	void set_pistes(const PackedByteArray &p_masque, int p_largeur, double p_rayon) {
+		masque_pistes = p_masque;
+		masque_largeur = p_largeur;
+		rayon_lisse = p_rayon;
+	}
+
 	Array raccorder(const PackedFloat32Array &leve, const PackedFloat32Array &ref, const PackedByteArray &fine_ref,
 			const PackedFloat32Array &h, const PackedFloat32Array &h0, int nx, int nz, int k_h, int k_r,
 			const PackedFloat32Array &capsules, const PackedFloat32Array &rects, double r1_rect,

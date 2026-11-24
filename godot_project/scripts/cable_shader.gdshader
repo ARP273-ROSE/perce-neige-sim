@@ -72,6 +72,7 @@ uniform float slack_wave_len = 7.3;
 // Abscisse : d = −VERTEX.z (distance horizontale au nez aval), brin selon
 // le signe de VERTEX.x. Inactif (le funiculaire) tant que n_appuis < 2.
 uniform int n_appuis = 0;
+uniform float rayon_tube = 0.0;   // rayon du tube (accrochage des anneaux sous les véhicules)
 uniform vec4 appuis[12];          // d des appuis, 4 par vec4, croissants
 uniform float signe_montee = 1.0; // signe de x du brin montée
 uniform int n_charges_m = 0;
@@ -140,6 +141,46 @@ float fleche_points(float d, bool montee) {
 	return f;
 }
 
+// accrochage (UV2 = pente dy/dd, demi-pas de l'anneau ; 0 : non) : l'anneau le plus proche d'une charge de sa portée,
+// à moins d'un demi-pas, glisse jusque sous elle — la cassure reste sous le véhicule au lieu de sauter d'un anneau à
+// l'autre (« une onde qui se propage », 24/11/2026)
+float accrocher(float d, bool montee, float h) {
+	if (h <= 0.0 || n_appuis < 2) {
+		return d;
+	}
+	float x1 = appui(0);
+	float x2 = appui(n_appuis - 1);
+	if (d <= x1 || d >= x2) {
+		return d;
+	}
+	for (int i = 0; i < n_appuis - 1; i++) {
+		float a0 = appui(i);
+		float a1 = appui(i + 1);
+		if (d >= a0 && d <= a1) {
+			x1 = a0;
+			x2 = a1;
+			break;
+		}
+	}
+	bool locale = zone_mode && x1 >= zone_loc.x - 1e-3 && x2 <= zone_loc.y + 1e-3;
+	int n = (zone_mode && !locale) ? 0 : (montee ? n_charges_m : n_charges_d);
+	float res = d;
+	float best = h;
+	for (int j = 0; j < n; j++) {
+		vec4 c = montee ? charges_m[j / 2] : charges_d[j / 2];
+		float a = (j - (j / 2) * 2) == 0 ? c.x : c.z;
+		if (a <= x1 || a >= x2) {
+			continue;
+		}
+		float e = abs(a - d);
+		if (e < best) {
+			best = e;
+			res = a;
+		}
+	}
+	return res;
+}
+
 // levée du tracteur en d : câble tendu tiré par la pince, donc presque droit de la pince au galet, raccordé au galet
 // sur son dernier quart par une parabole tangente (pente nulle sur le galet) — retour d'utilisateur du 12/11/2026 :
 // « le câble tracteur reste collé aux galets jusqu'au dernier moment » (le cosh restait à 20 % de la levée à mi-chemin)
@@ -193,6 +234,13 @@ void vertex() {
 	}
 	if (n_appuis >= 2) {
 		bool montee = sign(VERTEX.x) == signe_montee;
+		// (décision prise au centre de l'anneau, NORMAL radiale : tout l'anneau glisse d'un bloc)
+		float dc = -VERTEX.z + rayon_tube * NORMAL.z;
+		float dd = slack > 0.0 ? 0.0 : accrocher(dc, montee, UV2.y) - dc;
+		if (dd != 0.0) {
+			VERTEX.y += UV2.x * dd;
+			VERTEX.z -= dd;
+		}
 		VERTEX.y -= fleche_points(-VERTEX.z, montee);
 	}
 	if (n_levees_m + n_levees_d > 0) {

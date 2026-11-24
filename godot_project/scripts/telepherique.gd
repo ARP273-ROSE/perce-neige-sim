@@ -820,6 +820,8 @@ func _placer(i: int) -> void:
 	var pente: float = atan2(yb - ya, 2.0 * z_bout * c0)
 	v.inclinaison(pente)
 	_poser_paires(v, d, montee, x)
+	if _dt > 0.0 and _corps_proche:
+		v.rouler(_v * _dt * (1.0 if montee else -1.0))     # galets du chariot (la cabine 1 va en sens inverse)
 	if _dt > 0.0:
 		var m0: float = v.masse
 		v.masse = m0 + OccupationRemontees.PAX_KG * passagers_cabine(i)

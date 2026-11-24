@@ -515,6 +515,36 @@ static func tube_tableaux_plage(pts: PackedVector3Array, r: float, seg: int, i0:
 	return a
 
 
+## UV2 d'accrochage des sommets du tube de la plage [i0, i1] (même ordre que tube_tableaux_plage) : (pente dy/dd,
+## demi-pas) de l'anneau de chaque sommet, d = −z. Le shader du câble glisse l'anneau le plus proche d'un véhicule
+## jusque sous lui (retour d'utilisateur du 24/11/2026 : « une onde qui se propage sur le câble » — la cassure, entre
+## deux anneaux tous les 3 m, sautait d'un anneau à l'autre au passage de chaque véhicule).
+static func uv2_accrochage(pts: PackedVector3Array, seg: int, i0: int, i1: int) -> PackedVector2Array:
+	var n: int = pts.size()
+	var par_anneau: PackedVector2Array = PackedVector2Array()
+	par_anneau.resize(i1 - i0 + 1)
+	for i in range(i0, i1 + 1):
+		var ip: int = maxi(i - 1, 0)
+		var isu: int = mini(i + 1, n - 1)
+		var dzp: float = absf(pts[i].z - pts[ip].z) if ip != i else INF
+		var dzs: float = absf(pts[isu].z - pts[i].z) if isu != i else INF
+		var dz: float = pts[ip].z - pts[isu].z
+		var h: float = 0.5 * minf(dzp, dzs)
+		# (anneaux de la ligne seulement : en gare, sur la poulie, le câble ne va pas tout droit selon −z)
+		if absf(dz) < 0.05 or not is_finite(h) or absf(pts[isu].x - pts[ip].x) > 0.2 * absf(dz):
+			par_anneau[i - i0] = Vector2.ZERO
+		else:
+			par_anneau[i - i0] = Vector2((pts[isu].y - pts[ip].y) / dz, h)
+	var nv: int = (i1 - i0) * seg * 6
+	var o: PackedVector2Array = PackedVector2Array()
+	o.resize(nv)
+	var dec: PackedInt32Array = PackedInt32Array([0, 1, 1, 0, 1, 0])
+	for w in range(nv):
+		@warning_ignore("integer_division")
+		o[w] = par_anneau[w / 6 / seg + dec[w % 6]]
+	return o
+
+
 ## Câble tracteur : le shader à torons du câble du funiculaire (Fatzer 52 mm,
 ## 6 torons, pas 0,45 m), pas mis à l'échelle du diamètre (mm) ; sa phase
 ## (`cable_phase`, m) fait défiler les torons à la vitesse du câble (retour

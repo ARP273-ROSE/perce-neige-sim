@@ -298,7 +298,27 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 		a -= u * RACCORD_BOUT
 		b += u * RACCORD_BOUT
 		var r0: float = float(D["voie"]) * 0.5 + RACCORD_R0
+		var fam: String = String(D["famille"])
+		if fam == "cabine_tph" or fam == "cabine_3s":
+			# câble haut au-dessus du sol : le sol réglé aux gares et aux pieds des pylônes seulement (retour
+			# d'utilisateur du 24/11/2026 : « une grosse zone en élévation sous le tracé du TPH de la Grande Motte » —
+			# le glacier a fondu de 6 m en moyenne, jusqu'à 16 m, entre la grille à 5 m et le relevé LiDAR)
+			var ab: float = a.distance_to(b)
+			caps.append_array(PackedFloat32Array([a.x, a.y, (a + u * (RACCORD_BOUT + GARE_HAUTE)).x, (a + u * (RACCORD_BOUT + GARE_HAUTE)).y, r0, r0 + RACCORD_LARGEUR]))
+			caps.append_array(PackedFloat32Array([(b - u * (RACCORD_BOUT + GARE_HAUTE)).x, (b - u * (RACCORD_BOUT + GARE_HAUTE)).y, b.x, b.y, r0, r0 + RACCORD_LARGEUR]))
+			var a0: Vector2 = a + u * RACCORD_BOUT
+			for py in D["pylones"]:
+				var pp: Vector2 = a0 + u * clampf(float(py["d"]), 0.0, ab)
+				caps.append_array(PackedFloat32Array([pp.x, pp.y, pp.x, pp.y, PIED_PYLONE, PIED_PYLONE + RACCORD_LARGEUR]))
+			continue
 		caps.append_array(PackedFloat32Array([a.x, a.y, b.x, b.y, r0, r0 + RACCORD_LARGEUR]))
+	if n.has_method("set_pistes"):
+		var im: Image = (load("res://textures/pistes_masque.png") as Texture2D).get_image()
+		if im != null:
+			if im.is_compressed():
+				im.decompress()
+			im.convert(Image.FORMAT_L8)
+			n.call("set_pistes", im.get_data(), im.get_width(), LISSE_PISTES)
 	var reference: PackedFloat32Array = _hn
 	var res: Array = n.call("raccorder", leve, _hn, _fine, h_retouche, h0, ReliefDonnees.NX, ReliefDonnees.NZ, kv, KF,
 		caps, rects, RACCORD_LARGEUR, X0, Z0, L_X / kv, L_Z / kv)
@@ -342,6 +362,9 @@ const RACCORD_R0: float = 12.0        # couloir d'une ligne, au-delà de sa demi
 const RACCORD_LARGEUR: float = 16.0   # raccord vers le relevé
 const RACCORD_GARE: float = 30.0      # abords des gares du funiculaire (rampes, terrasses, au ras du sol)
 const RACCORD_BOUT: float = 60.0      # couloir prolongé derrière chaque gare (rampes)
+const GARE_HAUTE: float = 60.0        # téléphériques et 3S : sol réglé devant chaque gare, puis le relevé
+const PIED_PYLONE: float = 14.0       # téléphériques et 3S : sol réglé au pied de chaque pylône
+const LISSE_PISTES: float = 4.0       # pistes damées : relevé lissé sur ± 4 m (ornières, blocs, crevasses comblés)
 
 
 ## Tableau de textures vide (fil principal), rempli couche par couche par envoyer_couches : le créer

@@ -119,6 +119,7 @@ inline int64_t taille_bc5(int taille) {
 
 void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("decoder", "chemin", "niveau", "nj", "ni"), &ReliefHD::decoder);
+	ClassDB::bind_method(D_METHOD("set_pistes", "masque", "largeur", "rayon"), &ReliefHD::set_pistes);
 	ClassDB::bind_method(D_METHOD("raccorder", "leve", "ref", "fine_ref", "h", "h0", "nx", "nz", "k_h", "k_r", "capsules", "rects", "r1_rect", "x0", "z0", "px", "pz"), &ReliefHD::raccorder);
 	ClassDB::bind_method(D_METHOD("pyramide", "hn", "nj", "ni", "niveaux"), &ReliefHD::pyramide);
 	ClassDB::bind_method(D_METHOD("anneaux", "hn", "pyr", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
@@ -393,6 +394,68 @@ Array ReliefHD::raccorder(const PackedFloat32Array &leve, const PackedFloat32Arr
 			}
 		}
 	});
+
+	// pistes damées : moyenne du relevé par blocs de ±s nœuds, sur une grille de pas s (lue en bilinéaire), et
+	// poids du masque par nœud
+	const int64_t mw = masque_largeur;
+	const int64_t mh = mw > 0 ? masque_pistes.size() / mw : 0;
+	const int s_l = rayon_lisse > 0.0 ? std::max(1, int(std::lround(rayon_lisse / px))) : 0;
+	const bool lisser = s_l > 0 && mw > 1 && mh > 1;
+	const int64_t gj = lisser ? (nj - 1) / s_l + 2 : 0;
+	const int64_t gi = lisser ? (ni - 1) / s_l + 2 : 0;
+	std::vector<float> moy(size_t(gj * gi), 0.0f);
+	if (lisser) {
+		const float *plv = leve.ptr();
+		float *pmo = moy.data();
+		en_parallele(gi, [&](int64_t a) {
+			for (int64_t b = 0; b < gj; b++) {
+				const int64_t ic = std::min<int64_t>(a * s_l, ni - 1);
+				const int64_t jc = std::min<int64_t>(b * s_l, nj - 1);
+				double sm = 0.0;
+				int nb = 0;
+				for (int64_t i = std::max<int64_t>(ic - s_l, 0); i <= std::min<int64_t>(ic + s_l, ni - 1); i++) {
+					for (int64_t j = std::max<int64_t>(jc - s_l, 0); j <= std::min<int64_t>(jc + s_l, nj - 1); j++) {
+						sm += plv[i * nj + j];
+						nb++;
+					}
+				}
+				pmo[size_t(a * gj + b)] = float(sm / std::max(nb, 1));
+			}
+		});
+	}
+	const uint8_t *pmq = lisser ? masque_pistes.ptr() : nullptr;
+	const float *pmo_c = moy.data();
+	auto releve = [&](int64_t i, int64_t j, float l) -> float {
+		if (!lisser) {
+			return l;
+		}
+		const int64_t mx = std::min<int64_t>(j * mw / nj, mw - 1);
+		const int64_t my = std::min<int64_t>(i * mh / ni, mh - 1);
+		const float m = float(pmq[my * mw + mx]) / 255.0f;
+		if (m <= 0.0f) {
+			return l;
+		}
+		const float fa = float(i) / s_l;
+		const float fb = float(j) / s_l;
+		const int64_t a = std::min<int64_t>(int64_t(fa), gi - 2);
+		const int64_t b = std::min<int64_t>(int64_t(fb), gj - 2);
+		const float v = fa - float(a);
+		const float u = fb - float(b);
+		const float *g0 = pmo_c + a * gj + b;
+		const float g = (g0[0] * (1.0f - u) + g0[1] * u) * (1.0f - v) + (g0[gj] * (1.0f - u) + g0[gj + 1] * u) * v;
+		return l + (g - l) * std::min(m * 1.5f, 1.0f);
+	};
+
+	// lissé SUR PLACE dans le relevé (const_cast voulu : le GDScript en tire ensuite les normales du sol, qui doivent
+	// être celles du sol lissé ; chaque nœud ne lit que lui-même et la grille des moyennes, déjà faite)
+	if (lisser) {
+		float *plw = const_cast<float *>(leve.ptr());
+		en_parallele(ni, [&](int64_t i) {
+			for (int64_t j = 0; j < nj; j++) {
+				plw[i * nj + j] = releve(i, j, plw[i * nj + j]);
+			}
+		});
+	}
 
 	PackedFloat32Array hn;
 	hn.resize(ni * nj);
