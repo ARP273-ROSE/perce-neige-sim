@@ -5,6 +5,17 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version (non publiée)
+
+- **Audit mémoire du module C++** : module recompilé avec les détecteurs d'erreurs mémoire (AddressSanitizer,
+  UBSan), 101 bancs passés sans aucune alerte, empreintes identiques. Lecteurs du pack HD (relief, images,
+  forêt) soumis à 5 000 fichiers corrompus au hasard : aucune lecture ni écriture hors limites. Seul défaut
+  trouvé : `ReliefHD.decoder` acceptait un niveau négatif (décalage négatif, division par zéro) ; il le
+  refuse désormais. Le pack HD reste vérifié par son empreinte SHA-256 avant toute lecture.
+- **PWA, faux plantages « Error in input stream »** (Firefox, 7 rapports, un par mise à jour) : le
+  rechargement qui suit une mise à jour coupait un téléchargement en cours. Le rapporteur se tait désormais
+  dès que la page se recharge ou se ferme.
+
 ## 1.76.6 — 23 novembre 2026
 
 Retours d'un essai à deux (Linux, Windows, iPad) :

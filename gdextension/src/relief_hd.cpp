@@ -137,6 +137,10 @@ void ReliefHD::_bind_methods() {
 
 PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, int ni) const {
 	PackedFloat32Array sortie;
+	// (paramètres hors domaine : décalage négatif ou division par zéro plus bas)
+	if (niveau < 0 || niveau > 15 || nj < 2 || ni < 2) {
+		return sortie;
+	}
 	Ref<FileAccess> f = FileAccess::open(chemin, FileAccess::READ);
 	if (f.is_null()) {
 		return sortie;
