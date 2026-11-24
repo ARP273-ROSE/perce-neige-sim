@@ -5,6 +5,21 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.77.2 — 24 novembre 2026
+
+- **Plus d'onde sur les câbles** (retour d'utilisateur du 24/11/2026 : « sur tous les câbles je vois une onde qui se
+  propage ») : la cassure sous chaque véhicule sautait d'un anneau du tube à l'autre (3 à 4 m). L'anneau le plus
+  proche se cale maintenant sous le véhicule (nuanceur du câble, UV2 par anneau) : monocâbles et porteurs du 3S.
+- **Galets du chariot des téléphériques** (« on ne les voit pas tourner, leur diamètre est trop grand, ils se
+  touchent ») : Ø 0,31 m au Fornet, 0,26 m à la Grande Motte, et ils tournent avec la cabine.
+- **Décor HD** (« une grosse zone en élévation sous le tracé du TPH de la Grande Motte », « des trous et bosses
+  partout sur la piste ») : le sol de l'ancienne grille à 5 m, gardé sous chaque ligne, dépassait le relevé LiDAR de
+  6 à 16 m sur le glacier fondu. Téléphériques et 3S : ce sol ne reste qu'aux gares et aux pieds des pylônes ;
+  autres lignes : couloir par tronçons de 40 m, raccordé au relevé en pente douce selon l'écart (4 m par mètre, 140 m
+  au plus) ; téléskis : la seule trace hors des gares. Pistes damées : relevé lissé sur ± 4 m (ornières, blocs,
+  crevasses du relevé d'été), au niveau actuel du glacier. Vérifié en captures HD sous la Grande Motte, le Signal,
+  le Montet et Termignon.
+
 ## 1.77.1 — 24 novembre 2026
 
 - **Garde-corps des sièges vides relevé** (retour d'utilisateur du 24/11/2026 : « sur les TSD sans bulle et les TSF,
