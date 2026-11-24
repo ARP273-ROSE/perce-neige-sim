@@ -311,7 +311,34 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 				var pp: Vector2 = a0 + u * clampf(float(py["d"]), 0.0, ab)
 				caps.append_array(PackedFloat32Array([pp.x, pp.y, pp.x, pp.y, PIED_PYLONE, PIED_PYLONE + RACCORD_LARGEUR]))
 			continue
-		caps.append_array(PackedFloat32Array([a.x, a.y, b.x, b.y, r0, r0 + RACCORD_LARGEUR]))
+		# autres lignes : le couloir par tronçons, raccordé au relevé en pente douce selon l'écart entre les deux
+		# sols (retour d'utilisateur du 24/11/2026 : bandes de 5 à 30 m sous les téléskis du glacier, fondu en
+		# 2026 sous le câble posé sur la grille à 5 m) ; téléskis : la seule trace, plus large aux gares
+		var perche: bool = fam.begins_with("perche")
+		var ab2: float = a.distance_to(b)
+		var nt: int = maxi(int(ceil(ab2 / TRONCON)), 1)
+		var pire: float = 0.0
+		for t in range(nt):
+			var s0: float = ab2 * t / nt
+			var s1: float = ab2 * (t + 1) / nt
+			var q0: Vector2 = a + u * s0
+			var q1: Vector2 = a + u * s1
+			var rt: float = r0
+			if perche and s0 > RACCORD_BOUT + GARE_HAUTE and s1 < ab2 - RACCORD_BOUT - GARE_HAUTE:
+				rt = float(D["voie"]) * 0.5 + R0_TRACE
+			var ecart: float = 0.0
+			var s: float = s0
+			while s <= s1 + 0.01:
+				var c: Vector2 = a + u * s
+				for x in [-rt, 0.0, rt]:
+					var w: Vector2 = c + Vector2(-u.y, u.x) * x
+					ecart = maxf(ecart, absf(_sur_grille(_hn, NJ, NI, PX, PZ, w) - _sur_grille(leve, nj1, ni1, L_X / kv, L_Z / kv, w)))
+				s += 5.0
+			var rl: float = clampf(PENTE_RACCORD * ecart, RACCORD_LARGEUR, RACCORD_MAXI)
+			caps.append_array(PackedFloat32Array([q0.x, q0.y, q1.x, q1.y, rt, rt + rl]))
+			pire = maxf(pire, ecart)
+		if pire > 4.0:
+			print("[ReliefHD] %s : couloir à %.1f m du relevé au pire, raccord en pente douce" % [String(D["cle"]), pire])
 	if n.has_method("set_pistes"):
 		var im: Image = (load("res://textures/pistes_masque.png") as Texture2D).get_image()
 		if im != null:
@@ -364,6 +391,10 @@ const RACCORD_GARE: float = 30.0      # abords des gares du funiculaire (rampes,
 const RACCORD_BOUT: float = 60.0      # couloir prolongé derrière chaque gare (rampes)
 const GARE_HAUTE: float = 60.0        # téléphériques et 3S : sol réglé devant chaque gare, puis le relevé
 const PIED_PYLONE: float = 14.0       # téléphériques et 3S : sol réglé au pied de chaque pylône
+const TRONCON: float = 40.0          # couloir des autres lignes, par tronçons
+const R0_TRACE: float = 4.0           # téléskis : trace, au-delà de la demi-voie, hors des gares
+const PENTE_RACCORD: float = 4.0      # raccord au relevé : 4 m de large par mètre d'écart (14°)
+const RACCORD_MAXI: float = 140.0
 const LISSE_PISTES: float = 4.0       # pistes damées : relevé lissé sur ± 4 m (ornières, blocs, crevasses comblés)
 
 
@@ -695,3 +726,15 @@ func _exit_tree() -> void:
 		LigneRemontee.fermeture = true
 		LigneRemontee.attendre_fil(_tache)
 		_tache = -1
+
+
+## Hauteur d'une grille (nj × ni nœuds, pas px × pz depuis X0, Z0) en w, en bilinéaire.
+static func _sur_grille(g: PackedFloat32Array, nj: int, ni: int, px: float, pz: float, w: Vector2) -> float:
+	var fx: float = clampf((w.x - X0) / px, 0.0, nj - 1.001)
+	var fz: float = clampf((w.y - Z0) / pz, 0.0, ni - 1.001)
+	var j: int = int(fx)
+	var i: int = int(fz)
+	var tx: float = fx - j
+	var tz: float = fz - i
+	var k: int = i * nj + j
+	return lerpf(lerpf(g[k], g[k + 1], tx), lerpf(g[k + nj], g[k + nj + 1], tx), tz)
