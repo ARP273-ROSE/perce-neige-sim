@@ -152,7 +152,8 @@ def test_fenetre_memorisee(jeu):
         # taille d'avant, ramenée par Qt à l'écran s'il est plus petit
         dispo = QApplication.primaryScreen().availableGeometry()
         assert w2.height() == 720
-        assert w2.width() == min(1100, dispo.width() - 2) or w2.width() == 1100
+        # (Qt la ramène à l'écran à 2 px près ou à sa pleine largeur selon la version : 798 ou 800 sur 800)
+        assert w2.width() == 1100 or dispo.width() - 2 <= w2.width() <= dispo.width()
     finally:
         w2.close()
     win.show()

@@ -7595,7 +7595,11 @@ class BoutonHud(QPushButton):
     """Bouton de la barre du plein cadre, dessiné EXACTEMENT comme ceux de la colonne de la 3D
     (commandes_skieur.gd, _bouton : 170 × 64 unités de toile, rayon 14, liseré bleu clair de 2, fond bleu nuit
     translucide, police 20, vert quand enfoncé) — retour d'utilisateur du 24/11/2026 : « en haut à gauche ils n'ont
-    pas la même forme qu'à droite ». Le raccourci clavier est dans l'info-bulle, comme à droite."""
+    pas la même forme qu'à droite ». Raccourci clavier entre parenthèses après le libellé, comme à droite sur le
+    PC ; même police (Liberation Sans grasse, polices/ = godot_project/fonts/) et même largeur (LARGEUR_BOUTON =
+    LARGEUR_PC de commandes_skieur.gd)."""
+
+    LARGEUR_BOUTON = 236          # « MODE CONDUITE (F9) » : 212 + marges
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -7608,7 +7612,7 @@ class BoutonHud(QPushButton):
     def regler(self, libelle: str, raccourci: str, aide: str = "") -> None:
         if (libelle, raccourci, aide) != (self.libelle, self.raccourci, self.aide):
             self.libelle, self.raccourci, self.aide = libelle, raccourci, aide
-            self.setToolTip(f"{aide} ({raccourci})" if aide and raccourci else (aide or raccourci))
+            self.setToolTip(aide)
             self.update()
 
     def paintEvent(self, ev) -> None:  # noqa: N802
@@ -7625,7 +7629,11 @@ class BoutonHud(QPushButton):
         f = QFont(self.font())
         f.setPixelSize(max(9, int(20.0 * u)))
         p.setFont(f)
-        p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), self.libelle)
+        f.setFamily("Liberation Sans")
+        f.setBold(True)
+        p.setFont(f)
+        p.drawText(r, int(Qt.AlignmentFlag.AlignCenter),
+                   f"{self.libelle} ({self.raccourci})" if self.raccourci else self.libelle)
         p.end()
 
 
@@ -7651,7 +7659,8 @@ class BarrePleinCadre(QWidget):
     # (VUES retiré : la 3D a son bouton VUE LIGNE, à bord seulement — retour d'utilisateur du 19/11/2026, « boutons
     # en double ») ; PUPITRE seulement quand le pupitre concerne ce qu'on fait (voir GameWidget._pupitre_utile)
     # (PLEIN ÉCRAN retiré avec F11, 24/11/2026 : la vue 3D plein cadre est toujours en plein écran)
-    CLES = ("poste", "skieur", "pupitre", "pause", "aide")
+    # ECRAN : quitter le plein écran sans quitter la 3D (F11, retour d'utilisateur du 24/11/2026)
+    CLES = ("poste", "skieur", "pupitre", "ecran", "pause", "aide")
 
     def __init__(self, jeu: "GameWidget") -> None:
         super().__init__(jeu.window(),
@@ -7691,6 +7700,9 @@ class BarrePleinCadre(QWidget):
         b["skieur"].regler(T("DRIVE MODE", "MODE CONDUITE") if skieur else T("SKIER MODE", "MODE SKIEUR"), "F9",
                            T("Drive the Perce-Neige", "Conduire le Perce-Neige") if skieur
                            else T("Walk and ski around the resort", "Marcher et skier sur le domaine"))
+        b["ecran"].regler(T("WINDOW", "FENÊTRE") if plein else T("FULL SCREEN", "PLEIN ÉCRAN"), "F11",
+                          T("Leave full screen, the 3D view stays", "Quitter le plein écran, la vue 3D reste") if plein
+                          else T("Back to full screen", "Revenir en plein écran"))
         b["pause"].regler(T("RESUME", "REPRENDRE") if pause else T("PAUSE", "PAUSE"), "P")
         b["aide"].regler(T("CLOSE", "FERMER") if aide else T("HELP", "AIDE"), "F1",
                          T("Keys and controls", "Touches et commandes"))
@@ -7700,14 +7712,14 @@ class BarrePleinCadre(QWidget):
     def placer(self, zone) -> None:
         """En haut à gauche de la zone 3D (coordonnées écran)."""
         k = echelle_toile_3d(zone.width(), zone.height())
-        # (toile : boutons de 52 de haut et 124 de large, rangée de 7 × 132 = 924 au plus, en y 8 → 60 ; le poste du
-        # skieur commence à 72, son compteur à 76, sa carte à 1600 − 526 = 1074 et sa colonne à droite)
+        # (toile : boutons de 64 de haut et 236 de large, rangée de 6 × 250 = 1 500 au plus, en y 8 → 72 ; le poste
+        # du skieur commence à 72, son compteur à 76, sa carte en y 96 et sa colonne en y 112)
         h = int(max(30, 64 * k))
         if h != self._haut_bouton:
             self._haut_bouton = h
             self._lay.setSpacing(max(4, int(14 * k)))
             for bt in self._boutons.values():
-                bt.setFixedSize(int(max(70, 170 * k)), h)
+                bt.setFixedSize(int(max(90, BoutonHud.LARGEUR_BOUTON * k)), h)
             self.adjustSize()
         # (en y 8 → 72 : la ligne d'info du skieur de la 3D commence à 76)
         x, y = zone.x() + max(4, int(24 * k)), zone.y() + max(4, int(8 * k))
@@ -7888,7 +7900,7 @@ class GameWidget(QWidget):
         Qt.Key.Key_L, Qt.Key.Key_N, Qt.Key.Key_Backspace,
         Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3,
         Qt.Key.Key_F4, Qt.Key.Key_F5, Qt.Key.Key_F6,
-        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F12,
+        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F11, Qt.Key.Key_F12,
         Qt.Key.Key_O,
         Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
         # ni la conduite ni la rame : klaxon, phares, éclairages (retour d'utilisateur,
@@ -7900,7 +7912,7 @@ class GameWidget(QWidget):
     SKIEUR_GARDE = frozenset(int(k) for k in (
         Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3, Qt.Key.Key_F4,
         Qt.Key.Key_F5, Qt.Key.Key_F6, Qt.Key.Key_F7, Qt.Key.Key_F8,
-        Qt.Key.Key_F9, Qt.Key.Key_F12, Qt.Key.Key_Escape, Qt.Key.Key_P,
+        Qt.Key.Key_F9, Qt.Key.Key_F11, Qt.Key.Key_F12, Qt.Key.Key_Escape, Qt.Key.Key_P,
         Qt.Key.Key_N, Qt.Key.Key_L, Qt.Key.Key_J,
         # (C, H, K : commandes du véhicule où l'on est, relayées à la 3D — 24/11/2026)
         # X : exploitation auto, aussi en skieur (09/10/2026)
@@ -8234,6 +8246,7 @@ class GameWidget(QWidget):
         # dans la fenêtre (pas de plein écran à l'insu de l'utilisateur).
         # Remis à False dès que le plein cadre se termine.
         self._plein_ecran_3d = False
+        self._fenetre_3d = False            # vue 3D plein cadre laissée en fenêtre (F11)
         self._barre_3d: BarrePleinCadre | None = None
         self._surimpression: PupitreSurimpression | None = None
         self._pupitre_replie = False
@@ -9811,13 +9824,14 @@ class GameWidget(QWidget):
             self._plein_cadre_vu = pc
             if not pc:
                 self._plein_ecran_3d = False
+                self._fenetre_3d = False
             if self._godot_embed_widget is not None or self._godot_child_hwnd:
                 self._reposition_godot_embed()
             self.update()
         fen = self.window()
         if hasattr(fen, "plein_ecran_3d"):
-            # vue 3D plein cadre = plein écran, toujours (F11 retiré le 24/11/2026 : un seul geste, F12)
-            fen.plein_ecran_3d(pc)
+            # vue 3D plein cadre = plein écran, sauf FENÊTRE (F11, 24/11/2026)
+            fen.plein_ecran_3d(pc and not self._fenetre_3d)
         self._maj_barre_3d()
 
     def _maj_barre_3d(self) -> None:
@@ -9890,12 +9904,22 @@ class GameWidget(QWidget):
             self.basculer_skieur()
         elif cle == "ligne" and self._skieur:
             self._skieur_vue_ligne_n += 1
+        elif cle == "ecran":
+            self.basculer_fenetre_3d()
         elif cle == "pause":
             self._virtual_key(Qt.Key.Key_P)
         elif cle == "aide":
             self._virtual_key(Qt.Key.Key_F1)
         self._maj_plein_cadre()
         self.update()
+
+    def basculer_fenetre_3d(self) -> None:
+        """F11, bouton FENÊTRE / PLEIN ÉCRAN : la vue 3D plein cadre en fenêtre (agrandie ou normale, comme avant
+        le plein écran) ou en plein écran ; retenu jusqu'au retour au poste (F12)."""
+        if not self._plein_cadre_3d():
+            return
+        self._fenetre_3d = not self._fenetre_3d
+        self._maj_plein_cadre()
 
     def basculer_pupitre(self) -> None:
         """Tab, bouton PUPITRE, clic sur l'en-tête : replie ou déplie le pupitre en surimpression."""
@@ -10347,6 +10371,11 @@ class GameWidget(QWidget):
             return
         if k == Qt.Key.Key_F12 and not ev.isAutoRepeat():
             self.basculer_plein_cadre()
+            ev.accept()
+            return
+        if k == Qt.Key.Key_F11 and not ev.isAutoRepeat():
+            self.basculer_fenetre_3d()
+            self._maj_barre_3d()
             ev.accept()
             return
         if (k == Qt.Key.Key_Escape and not ev.isAutoRepeat()
@@ -18343,6 +18372,7 @@ class GameWidget(QWidget):
                          "H/C/K votre véhicule")),
                 ("F12", T("3D view full screen ↔ Perce-Neige driving desk (Esc: back to the desk)",
                           "vue 3D plein écran ↔ poste du Perce-Neige (Échap : retour au poste)")),
+                ("F11", T("3D view: full screen ↔ window", "vue 3D : plein écran ↔ fenêtre")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),
@@ -18916,10 +18946,12 @@ class MainWindow(QMainWindow):
         act_h = menu.addAction(self._tr("Game time…", "Heure de jeu…"))
         act_h.triggered.connect(lambda _on=False: self._choisir_heure_jeu())
         menu.addSeparator()
-        # (« Plein écran » F11 retiré le 24/11/2026 : la vue 3D, F12, est en plein écran)
         act_cadre = menu.addAction(self._tr("3D view full screen / driving desk (F12)",
                                             "Vue 3D plein écran / poste de conduite (F12)"))
         act_cadre.triggered.connect(lambda _on=False: self.game.basculer_plein_cadre())
+        act_fen = menu.addAction(self._tr("3D view: full screen / window (F11)",
+                                          "Vue 3D : plein écran / fenêtre (F11)"))
+        act_fen.triggered.connect(lambda _on=False: (self.game.basculer_fenetre_3d(), self.game._maj_barre_3d()))
 
     def plein_ecran_3d(self, on: bool) -> None:
         """Plein écran demandé par la vue 3D plein cadre (F12, bouton) : on

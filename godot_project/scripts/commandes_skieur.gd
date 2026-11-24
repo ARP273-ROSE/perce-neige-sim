@@ -92,13 +92,14 @@ func _ready() -> void:
 	col.add_theme_constant_override("v_separation", 14)
 	col.add_theme_constant_override("h_separation", 14)
 	_racine.add_child(col)
-	_b_conduire = _bouton("PILOTER", "Prendre les commandes : au poste du Perce-Neige, s'asseoir et conduire ; à bord du Funival ou d'un téléphérique, son pupitre en manuel (touche E)")
+	_col = col
+	_b_conduire = _bouton("PILOTER", "Prendre les commandes : au poste du Perce-Neige, s'asseoir et conduire ; à bord du Funival ou d'un téléphérique, son pupitre en manuel (touche E)", "E")
 	_b_conduire.visible = false
 	_b_conduire.pressed.connect(func() -> void:
 		if main != null:
 			main.piloter())
 	col.add_child(_b_conduire)
-	_b_evac = _bouton("ÉVACUER", "Rame arrêtée en tunnel : enlever les issues de secours de la face et descendre sur la voie (touche U)")
+	_b_evac = _bouton("ÉVACUER", "Rame arrêtée en tunnel : enlever les issues de secours de la face et descendre sur la voie (touche U)", "U")
 	_b_evac.visible = false
 	_b_evac.pressed.connect(func() -> void:
 		if main != null:
@@ -111,7 +112,7 @@ func _ready() -> void:
 		if rm_c != null:
 			rm_c.descendre_corde())
 	col.add_child(_b_corde)
-	_b_exploit = _bouton("SERVICE AUTO", "Service automatique du funiculaire : embarquements et départs enchaînés sans conducteur, même en skieur (touche X ; Web : aussi F3)")
+	_b_exploit = _bouton("SERVICE AUTO", "Service automatique du funiculaire : embarquements et départs enchaînés sans conducteur, même en skieur (touche X ; Web : aussi F3)", "X")
 	_b_exploit.toggle_mode = true
 	_b_exploit.toggled.connect(func(on: bool) -> void:
 		if main != null:
@@ -133,7 +134,7 @@ func _ready() -> void:
 		carte.offset_bottom = 96.0 + CartePistes.TAILLE.y
 	col.resized.connect(placer_carte)
 	placer_carte.call()
-	_b_carte = _bouton("CARTE", "Carte des pistes autour de soi : + / − ou molette pour zoomer ; toucher une remontée pour y aller")
+	_b_carte = _bouton("CARTE", "Carte des pistes autour de soi : + / − ou molette pour zoomer ; toucher une remontée pour y aller", "M")
 	_b_carte.toggle_mode = true
 	_b_carte.button_pressed = true
 	_b_carte.visible = false
@@ -144,18 +145,18 @@ func _ready() -> void:
 			_carte_a_pied = on
 		_maj_carte())
 	col.add_child(_b_carte)
-	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige ; sur une perche de téléski, la lâcher (touche E)")
+	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige ; sur une perche de téléski, la lâcher (touche E)", "E")
 	_b_ski.pressed.connect(func() -> void:
 		if main != null:
 			main.basculer_ski())
 	col.add_child(_b_ski)
-	_b_echelle = _bouton("GRIMPER", "Monter à l'échelle du pylône, déchaussé ; de nouveau pour repartir dans l'autre sens (touche G ; joystick : haut, bas)")
+	_b_echelle = _bouton("GRIMPER", "Monter à l'échelle du pylône, déchaussé ; de nouveau pour repartir dans l'autre sens (touche G ; joystick : haut, bas)", "G")
 	_b_echelle.visible = false
 	_b_echelle.pressed.connect(func() -> void:
 		if main != null:
 			main.basculer_echelle())
 	col.add_child(_b_echelle)
-	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche B) ; il enclenche l'exploitation auto pour son trajet")
+	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche B) ; il enclenche l'exploitation auto pour son trajet", "B")
 	_b_auto.toggle_mode = true
 	# retiré de l'écran le 24/11/2026 (« BOUCLE ça sert à rien, mais garde le code ») : touche B toujours là
 	_b_auto.visible = false
@@ -163,7 +164,7 @@ func _ready() -> void:
 		if main != null and (main.skieur_auto != null) != on:
 			main.basculer_skieur_auto())
 	col.add_child(_b_auto)
-	_b_courir = _bouton("COURIR", "Courir (par défaut, 16 km/h ; Maj tenue pour marcher) ; à ski : schuss (ou Maj tenue)")
+	_b_courir = _bouton("COURIR", "Courir (par défaut, 16 km/h ; Maj tenue pour marcher) ; à ski : schuss (ou Maj tenue)", "Maj")
 	_b_courir.toggle_mode = true
 	_b_courir.button_pressed = true          # (course par défaut à pied, 24/11/2026)
 	_b_courir.toggled.connect(func(on: bool) -> void:
@@ -191,7 +192,7 @@ func _ready() -> void:
 	# ouvert, il replie le pupitre en surimpression du PC ; déplier celui-ci le ferme (fermer_poste)
 	GlisserPanneau.activer(poste)
 	poste.visibility_changed.connect(_poste_affiche)
-	_b_mesure = _bouton("MESURE", "Relevé de fluidité : une minute de mesures (images par seconde, à-coups), envoyé au développeur pour optimiser le jeu sur cet appareil (touche F10)")
+	_b_mesure = _bouton("MESURE", "Relevé de fluidité : une minute de mesures (images par seconde, à-coups), envoyé au développeur pour optimiser le jeu sur cet appareil (touche F10)", "F10")
 	_b_mesure.pressed.connect(func() -> void:
 		var pm: Node = main.get("perf_manager") if main != null else null
 		if pm != null:
@@ -211,16 +212,16 @@ func _ready() -> void:
 		if main != null:
 			PanneauReseau.ouvrir(self, main.reseau_client()))
 	col.add_child(b_r)
-	_b_vue = _bouton("CAMÉRA", "Changer de caméra : par les yeux du skieur, ou derrière lui (touche V)")
+	_b_vue = _bouton("CAMÉRA", "Changer de caméra : par les yeux du skieur, ou derrière lui (touche V)", "V")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)
-	_b_vue_ligne = _bouton("VUE LIGNE", "À bord d'une remontée : vue orbitale, depuis le pylône, depuis la gare, travelling, drone (touche T) ; glisser et molette en orbite")
+	_b_vue_ligne = _bouton("VUE LIGNE", "À bord d'une remontée : vue orbitale, depuis le pylône, depuis la gare, travelling, drone (touche T) ; glisser et molette en orbite", "T")
 	_b_vue_ligne.visible = false
 	_b_vue_ligne.pressed.connect(func() -> void:
 		if main != null:
 			main.basculer_vue_ligne())
 	col.add_child(_b_vue_ligne)
-	var b_q: Button = _bouton("MODE CONDUITE", "Quitter le skieur et revenir à la conduite du Perce-Neige")
+	var b_q: Button = _bouton("MODE CONDUITE", "Quitter le skieur et revenir à la conduite du Perce-Neige", "F9")
 	_b_quitter = b_q
 	b_q.pressed.connect(func() -> void:
 		if main != null:
@@ -271,13 +272,21 @@ func _ready() -> void:
 	_racine.add_child(_pique)
 
 
-func _bouton(texte: String, aide: String) -> Button:
+## Bouton de la colonne. `touche` : son raccourci clavier, écrit entre parenthèses après le libellé sur le PC
+## seulement (retour d'utilisateur du 24/11/2026) ; libellé changé ensuite par libeller(). Même dessin que la barre
+## du haut du PC (BoutonHud de perce_neige_sim.py) : Liberation Sans grasse, blanc.
+func _bouton(texte: String, aide: String, touche: String = "") -> Button:
 	var b: Button = Button.new()
+	b.set_meta("base", texte)
+	b.set_meta("touche", touche)
 	b.text = texte
 	b.tooltip_text = aide
 	b.focus_mode = Control.FOCUS_NONE
 	b.custom_minimum_size = Vector2(170, 64)
 	b.add_theme_font_size_override("font_size", 20)
+	b.add_theme_font_override("font", PolicesJeu.grasse())
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		b.add_theme_color_override(c, Color(1, 1, 1))
 	var sb: StyleBoxFlat = StyleBoxFlat.new()
 	sb.bg_color = Color(0.10, 0.13, 0.20, 0.55)
 	sb.border_color = Color(0.55, 0.75, 1.0, 0.8)
@@ -291,6 +300,37 @@ func _bouton(texte: String, aide: String) -> Button:
 	b.add_theme_stylebox_override("pressed", sbp)
 	_boutons.append(b)
 	return b
+
+
+## Libellé d'un bouton de la colonne, suivi de son raccourci sur le PC.
+func libeller(b: Button, texte: String) -> void:
+	b.set_meta("base", texte)
+	var t: String = texte
+	var k: String = String(b.get_meta("touche", ""))
+	if k != "" and _au_clavier:
+		t += " (%s)" % k
+	if b.text != t:
+		b.text = t
+
+
+var _au_clavier: bool = false
+var _col: VFlowContainer = null
+const LARGEUR_PC: float = 236.0         # (= LARGEUR_BOUTON de BoutonHud, perce_neige_sim.py)
+
+
+## PC (3D embarquée dans la fenêtre du simulateur) : raccourcis écrits sur les boutons.
+func _suivre_clavier() -> void:
+	var pc: bool = main != null and bool(main.get("client_mode"))
+	if pc == _au_clavier:
+		return
+	_au_clavier = pc
+	# (plus larges avec le raccourci : « SERVICE AUTO (X) » ; la barre du haut du PC prend la même largeur)
+	var l: float = LARGEUR_PC if pc else 170.0
+	if _col != null:
+		_col.offset_left = -24.0 - l
+	for b in _boutons:
+		(b as Button).custom_minimum_size.x = l
+		libeller(b, String((b as Button).get_meta("base", (b as Button).text)))
 
 
 func basculer_vue() -> void:
@@ -322,8 +362,8 @@ func chausse_affiche() -> bool:
 func set_chausse(oui: bool) -> void:
 	_chausse = oui
 	_maj_carte()
-	_b_ski.text = "DÉCHAUSSER" if oui else "CHAUSSER"
-	_b_courir.text = "SCHUSS" if oui else "COURIR"
+	libeller(_b_ski, "DÉCHAUSSER" if oui else "CHAUSSER")
+	libeller(_b_courir, "SCHUSS" if oui else "COURIR")
 	if skieur != null:
 		_b_courir.set_pressed_no_signal(skieur.schuss if oui else skieur.course)
 	if not oui:
@@ -394,19 +434,17 @@ func _process_corps(delta: float) -> void:
 		var sur_e: bool = skieur.sur_echelle()
 		_b_echelle.visible = sur_e or (rm != null and not skieur.chausse and not skieur.embarque and rm.echelle_proche(skieur.global_position) != null)
 		if _b_echelle.visible:
-			_b_echelle.text = ("DESCENDRE" if skieur._echelle_auto >= 0.0 or skieur.echelle_en_haut() else "GRIMPER") if sur_e else "GRIMPER"
+			libeller(_b_echelle, ("DESCENDRE" if skieur._echelle_auto >= 0.0 or skieur.echelle_en_haut() else "GRIMPER") if sur_e else "GRIMPER")
 		# MESURE : décompte pendant le relevé
 		var pm2: Node = main.get("perf_manager")
 		if pm2 != null and _b_mesure != null:
 			var t_m: String = "MESURE…" if bool(pm2.call("releve_en_cours")) else "MESURE"
-			if _b_mesure.text != t_m:
-				_b_mesure.text = t_m
+			libeller(_b_mesure, t_m)
 		_b_corde.visible = rm != null and rm.corde_possible()
 		# sur une perche, CHAUSSER devient LÂCHER (lâcher la perche en ligne)
 		var perche: bool = rm != null and rm.sur_perche()
 		var t_ski: String = "LÂCHER" if perche else ("DÉCHAUSSER" if _chausse else "CHAUSSER")
-		if _b_ski.text != t_ski:
-			_b_ski.text = t_ski
+		libeller(_b_ski, t_ski)
 		if lg == null and poste.visible:
 			poste.visible = false
 			_b_poste.set_pressed_no_signal(false)
@@ -415,6 +453,7 @@ func _process_corps(delta: float) -> void:
 		# boutons en double sur le PC (retour d'utilisateur du 19/11/2026) : QUITTER = CONDUIRE de la barre du PC
 		if _b_quitter != null and _b_quitter.visible == bool(main.get("client_mode")):
 			_b_quitter.visible = not bool(main.get("client_mode"))
+		_suivre_clavier()
 	if _t_pique > 0.0:
 		_t_pique -= delta
 		if _t_pique <= 0.0 and _pique != null:
@@ -434,8 +473,8 @@ func set_vue_ligne(nom: String) -> void:
 	if _b_vue_ligne.visible != oui:
 		_b_vue_ligne.visible = oui
 	var t: String = "VUE LIGNE" if nom == "" or nom == "SKIEUR" else nom
-	if oui and _b_vue_ligne.text != t:
-		_b_vue_ligne.text = t
+	if oui:
+		libeller(_b_vue_ligne, t)
 
 
 func set_evacuation_possible(oui: bool) -> void:

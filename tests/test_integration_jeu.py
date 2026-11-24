@@ -46,11 +46,21 @@ def test_vue_3d_plein_ecran_par_defaut(jeu):
     assert not g._plein_cadre_3d()
 
 
-def test_plus_de_f11_ni_plein_ecran(jeu):
-    pn, _g = jeu
-    assert "ecran" not in pn.BarrePleinCadre.CLES
+def test_vue_3d_en_fenetre_f11(jeu):
+    """F11 / FENÊTRE (retour d'utilisateur du 24/11/2026) : la vue 3D plein cadre reste, hors du plein écran ;
+    retour au poste (F12) : oublié."""
+    pn, g = jeu
+    assert "ecran" in pn.BarrePleinCadre.CLES
+    g._cabin_view_state = 2
+    g._plein_cadre_force = None
+    assert g._plein_cadre_3d() and not g._fenetre_3d
+    g.basculer_fenetre_3d()
+    assert g._fenetre_3d and g._plein_cadre_3d()
+    g._plein_cadre_force = False
+    g._maj_plein_cadre()
+    assert not g._fenetre_3d
     src = (ICI / "perce_neige_sim.py").read_text(encoding="utf-8")
-    assert "Key_F11" not in src and "def basculer_plein_ecran" not in src
+    assert "def basculer_plein_ecran" not in src
 
 
 def test_touches_relayees_a_la_3d(jeu):

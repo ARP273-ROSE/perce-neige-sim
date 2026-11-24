@@ -5,6 +5,17 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version (non publiée)
+
+- **Boutons du PC harmonisés** (retour d'utilisateur du 24/11/2026 : « rajoute entre parenthèses le raccourci, mais
+  que sur la version PC ; un bouton pour quitter le plein écran ; boutons en haut à gauche et en bas à droite pas du
+  même style, fais le ménage ») : sur le PC seulement, chaque bouton porte son raccourci entre parenthèses
+  (« COURIR (Maj) », « POSTE PN (F12) ») ; barre du haut et colonne de la 3D en Liberation Sans grasse, blanc, même
+  largeur (236). Nouveau bouton FENÊTRE / PLEIN ÉCRAN (F11, aussi menu Affichage) : la vue 3D reste, hors du plein
+  écran, jusqu'au retour au poste (F12). Doublons déjà retirés sur le PC : PUPITRE et MODE CONDUITE de la colonne.
+- Test de la fenêtre mémorisée : Qt ramène la fenêtre à la pleine largeur de l'écran virtuel de la CI (800 au lieu
+  de 798).
+
 ## 1.77.2 — 24 novembre 2026
 
 - **Plus d'onde sur les câbles** (retour d'utilisateur du 24/11/2026 : « sur tous les câbles je vois une onde qui se
