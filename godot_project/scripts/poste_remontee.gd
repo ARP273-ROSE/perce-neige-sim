@@ -231,6 +231,11 @@ func _a_coupure(ex: ExploitationRemontee) -> bool:
 	return false
 
 
+## Trajet pour la télémesure du PC (son pupitre remplace ce poste) : "" sans ligne.
+func texte_trajet() -> String:
+	return _texte_trajet() if ligne != null and is_instance_valid(ligne) else ""
+
+
 ## Distance parcourue et restante sur la remontée, le long du câble, d'après notre position (demande d'utilisateur du
 ## 19/11/2026) : à bord, celle du véhicule ; à pied ou à ski, le skieur projeté sur l'axe de la ligne.
 func _texte_trajet() -> String:

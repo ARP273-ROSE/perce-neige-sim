@@ -401,6 +401,13 @@ func _apply(d: Dictionary) -> void:
 	# fenêtre du PC derrière une autre application ou réduite : 3D bridée à 20 i/s
 	if d.has("arriere_plan") and main != null and main.get("perf_manager") != null:
 		main.perf_manager.set_arriere_plan_pc(_b(d, "arriere_plan", false))
+	# échelle de l'interface choisie par le PC d'après la taille physique de l'écran (retour d'utilisateur du
+	# 24/11/2026, 4K 32" : « les boutons sont énormes ») ; la barre et le pupitre Qt suivent la même
+	if d.has("echelle_ui"):
+		var f_ui: float = clampf(_f(d, "echelle_ui", 1.0), 0.4, 1.5)
+		var w_ui: Window = get_tree().root
+		if absf(w_ui.content_scale_factor - f_ui) > 0.005:
+			w_ui.content_scale_factor = f_ui
 	# pupitre en surimpression du PC déplié : le poste du skieur se ferme (un seul poste de conduite à la fois)
 	var npf: int = _i(d, "skieur_poste_fermer", 0)
 	if npf != _last_poste_fermer:

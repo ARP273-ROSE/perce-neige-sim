@@ -7,6 +7,26 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Prochaine version (non publiée)
 
+- **PC, interface de la vue 3D à la taille de l'écran** (« sur un 4K 32" les boutons sont énormes ») : la toile de
+  1600 × 900 étirée donnait des boutons de près de 3 cm. Le PC calcule, d'après la densité physique de l'écran, un
+  facteur (0,5 à 1) pour qu'un bouton du HUD fasse ~12 mm ; la 3D l'applique (`content_scale_factor`), la barre de
+  boutons et le pupitre Qt le suivent. Inchangé sur un portable ou une petite vue 3D.
+- **Colonne de boutons du skieur** (« CORDE dépasse en haut ») : une seule colonne grandissait vers le haut et
+  sortait de l'écran ; elle passe désormais sur une 2e colonne, à gauche, quand la hauteur manque.
+- **Décor HD, première installation** : fenêtre de progression (Mo, débit, temps restant ; on joue pendant ce temps),
+  puis REDÉMARRER / PLUS TARD une fois installé ; téléchargement interrompu : reprise au lancement suivant.
+- **PC, plus de joystick à la souris** : affiché seulement sur écran tactile (ou au premier toucher).
+- **PC, un seul poste de remontée** : le bouton POSTE de la 3D (version PWA) faisait doublon avec le pupitre du PC,
+  plus complet (cadrans, pannes au choix, évacuation, acquittement). Il n'apparaît plus sur le PC ; son seul plus,
+  le trajet (parcouru, reste), passe dans la télémesure et s'affiche au pupitre du PC.
+- **Pupitre replié** : le nom de la remontée chevauchait la vitesse ; il est raccourci (…), comme le titre du
+  pupitre déplié sous le bouton AUTO.
+- **Aiguilles et valeurs du pupitre fluides** : il n'était repeint que 5 fois par seconde, et la 3D n'envoyait la
+  vitesse que 5 fois par seconde. Repeint désormais à chaque image où quelque chose change (le dessin coûte 1 à
+  2 ms en 4K ; 30 ou 10 images/s seulement si une machine y passe plus de 4 ou 8 ms) ; la 3D envoie en plus un
+  paquet léger 30 fois par seconde (vitesse, puissance, positions du va-et-vient), interpolé au PC avec 70 ms de
+  différé. Test : `tests/test_pupitre_fluide.py`.
+
 - **Audit mémoire du module C++** : module recompilé avec les détecteurs d'erreurs mémoire (AddressSanitizer,
   UBSan), 101 bancs passés sans aucune alerte, empreintes identiques. Lecteurs du pack HD (relief, images,
   forêt) soumis à 5 000 fichiers corrompus au hasard : aucune lecture ni écriture hors limites. Seul défaut

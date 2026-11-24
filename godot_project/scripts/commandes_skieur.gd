@@ -71,14 +71,26 @@ func _ready() -> void:
 	_joy.position = Vector2(40, -40 - 2.0 * R_BASE)
 	_joy.size = Vector2(2.0 * R_BASE, 2.0 * R_BASE)
 	_joy.draw.connect(_dessiner_joy)
+	# joystick seulement sur écran tactile (PC à la souris : ZQSD, retour d'utilisateur du 24/11/2026) ; un premier
+	# toucher le fait paraître (PC à écran tactile mal détecté)
+	_joy.visible = DisplayServer.is_touchscreen_available()
 	_racine.add_child(_joy)
-	var col: VBoxContainer = VBoxContainer.new()
-	col.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	col.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	col.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	# colonne de boutons en bas à droite, qui passe sur une 2e colonne (à sa gauche) quand la hauteur manque : une
+	# seule colonne grandissait vers le haut et sortait de l'écran, CORDE en tête (retour d'utilisateur du 24/11/2026)
+	var col: VFlowContainer = VFlowContainer.new()
+	col.anchor_left = 1.0
+	col.anchor_right = 1.0
+	col.anchor_top = 0.0
+	col.anchor_bottom = 1.0
+	col.offset_left = -174.0
 	col.offset_right = -24.0
+	col.offset_top = 112.0               # (sous la barre du haut et la ligne d'info)
 	col.offset_bottom = -24.0
-	col.add_theme_constant_override("separation", 14)
+	col.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	col.alignment = FlowContainer.ALIGNMENT_END          # chaque colonne calée en bas
+	col.set("reverse_fill", true)                        # la 1re colonne à droite
+	col.add_theme_constant_override("v_separation", 14)
+	col.add_theme_constant_override("h_separation", 14)
 	_racine.add_child(col)
 	_b_conduire = _bouton("CONDUIRE", "S'asseoir au poste et conduire la rame")
 	_b_conduire.visible = false
@@ -358,7 +370,9 @@ func _process_corps(delta: float) -> void:
 		# au Perce-Neige (gare ou rame), pas à bord d'une autre remontée : c'est lui, pas la voisine
 		if lg != null and rm.a_bord.is_empty() and bool(main.call("skieur_au_perce_neige")):
 			lg = null
-		_b_poste.visible = lg != null
+		# PC : le pupitre de la fenêtre du simulateur est LE poste (cadrans, pannes au choix, évacuation) ; ce poste-ci
+		# faisait doublon (retour d'utilisateur du 24/11/2026) — il reste suivi pour le trajet de la télémesure
+		_b_poste.visible = lg != null and not bool(main.get("client_mode"))
 		poste.ligne = lg
 		# ligne suivie : pannes au hasard, télémesure vers le pupitre du PC
 		if lg != ligne_suivie:
@@ -523,6 +537,8 @@ func _input(event: InputEvent) -> void:
 		var ir: int = (event as InputEventScreenTouch).index
 		if ir in _doigts or ir in [_doigt_joy, _doigt_vue, _doigt_zoom]:
 			_lacher(ir)
+	if event is InputEventScreenTouch and not _joy.visible:
+		_joy.visible = true
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		# le skieur ignore la « souris » tant qu'un doigt est posé (iPad :
 		# le pouce du joystick arrivait aussi en souris et tournait la vue)

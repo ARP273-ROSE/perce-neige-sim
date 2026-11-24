@@ -7322,6 +7322,111 @@ class HeureJeuDialog(QDialog):
                 "acc": int(self.acc.currentData()), "n": n}
 
 
+def redemarrer_appli(fenetre) -> None:
+    """Ferme proprement (journal, vue 3D) et relance le simulateur : paquet du kit (Python embarqué), exécutable
+    Linux, ou script lancé à la main."""
+    import subprocess
+    fenetre.close()
+    QApplication.processEvents()
+    try:
+        if getattr(sys, "frozen", False):
+            subprocess.Popen([sys.executable] + sys.argv[1:], start_new_session=(os.name != "nt"), close_fds=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:
+            import updater
+            if not (updater._kit().get("point_entree") and updater.restart()):
+                subprocess.Popen([sys.executable] + sys.argv, start_new_session=(os.name != "nt"), close_fds=True,
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+    # (la sortie Qt « propre » pouvait ne jamais rendre la main : fils audio et réseau, cf. _kit_install)
+    QTimer.singleShot(1500, lambda: os._exit(0))
+
+
+class PackHdDialog(QDialog):
+    """Première installation du décor haute définition (819 Mo) : progression du téléchargement, puis REDÉMARRER
+    (demande d'utilisateur du 24/11/2026). Non modale : on joue pendant ce temps ; la fermer laisse le téléchargement
+    continuer (la ligne d'état du pupitre le suit encore)."""
+
+    def __init__(self, parent) -> None:
+        super().__init__(parent)
+        from PyQt6.QtWidgets import QProgressBar
+        import pack_hd
+        self._ph = pack_hd
+        self.setWindowTitle(T("HD scenery", "Décor haute définition"))
+        self.setModal(False)
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        intro = QLabel(T(
+            "First launch: the high-definition scenery (precise terrain, aerial photos, forest) is being "
+            f"downloaded ({pack_hd.TAILLE >> 20} MB). You can keep playing meanwhile.",
+            "Premier lancement : le décor haute définition (relief précis, photos aériennes, forêt) se "
+            f"télécharge ({pack_hd.TAILLE >> 20} Mo). Vous pouvez jouer pendant ce temps."), self)
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        self._barre = QProgressBar(self)
+        self._barre.setRange(0, 1000)
+        lay.addWidget(self._barre)
+        self._texte = QLabel("", self)
+        self._texte.setWordWrap(True)
+        lay.addWidget(self._texte)
+        rang = QHBoxLayout()
+        rang.addStretch(1)
+        self._b_plus_tard = QPushButton(T("Hide", "Masquer"), self)
+        self._b_plus_tard.clicked.connect(self.close)
+        rang.addWidget(self._b_plus_tard)
+        self._b_redemarrer = QPushButton(T("Restart", "Redémarrer"), self)
+        self._b_redemarrer.setVisible(False)
+        self._b_redemarrer.clicked.connect(lambda: redemarrer_appli(self.parent().window() if self.parent() else self))
+        rang.addWidget(self._b_redemarrer)
+        lay.addLayout(rang)
+        self._mesures: list[tuple[float, int]] = []        # (instant, octets) : débit et temps restant
+        self._minuteur = QTimer(self)
+        self._minuteur.timeout.connect(self._maj)
+        self._minuteur.start(250)
+        self._maj()
+
+    def _maj(self) -> None:
+        ph = self._ph
+        phase, fait = ph.etat["phase"], int(ph.etat["fait"])
+        if phase in ("", "telechargement"):
+            t = time.monotonic()
+            self._mesures.append((t, fait))
+            self._mesures = [m for m in self._mesures if t - m[0] <= 8.0]
+            self._barre.setValue(int(1000 * fait / max(1, ph.TAILLE)))
+            debit = 0.0
+            if len(self._mesures) > 1 and self._mesures[-1][0] - self._mesures[0][0] > 0.5:
+                debit = (self._mesures[-1][1] - self._mesures[0][1]) / (self._mesures[-1][0] - self._mesures[0][0])
+            txt = f"{fait >> 20} / {ph.TAILLE >> 20} " + T("MB", "Mo")
+            if debit > 1e4:
+                reste = (ph.TAILLE - fait) / debit
+                txt += f" · {debit / 1048576:.1f} " + T("MB/s", "Mo/s") + " · " + (
+                    T("about ", "environ ") + (f"{int(reste // 60)} min" if reste >= 90 else f"{int(reste)} s"))
+            self._texte.setText(txt)
+        elif phase == "pose":
+            self._barre.setRange(0, 0)          # (barre animée : décompression)
+            self._texte.setText(T("Download complete: installing…", "Téléchargement terminé : installation…"))
+        elif phase == "pret":
+            self._barre.setRange(0, 1000)
+            self._barre.setValue(1000)
+            self._texte.setText(T("HD scenery installed. Restart the simulator to use it.",
+                                   "Décor haute définition installé. Redémarrez le simulateur pour en profiter."))
+            self._b_plus_tard.setText(T("Later", "Plus tard"))
+            if not self._b_redemarrer.isVisible():
+                self._b_redemarrer.setVisible(True)
+                self._b_redemarrer.setDefault(True)
+                self.show()
+                self.raise_()
+            self._minuteur.stop()
+        elif phase == "attente":
+            self._barre.setRange(0, 1000)
+            self._texte.setText(T("Download interrupted (network or disk space): it will resume at next launch.",
+                                   "Téléchargement interrompu (réseau ou place sur le disque) : il reprendra au "
+                                   "prochain lancement."))
+            self._b_plus_tard.setText(T("Close", "Fermer"))
+            self._minuteur.stop()
+
+
 class PannesRemonteeDialog(QDialog):
     """Menu PANNES d'une remontée (comme celui du Perce-Neige) : le catalogue reçu de la vue 3D, une panne
     par bouton, et « au hasard ». La 3D déclenche ; le pupitre affiche ce qu'elle renvoie."""
@@ -7462,11 +7567,28 @@ class FaultPickerDialog(QDialog):
         self.accept()
 
 
+# Interface de la vue 3D sur le PC : la toile de 1600 × 900 étirée à la vue donnait sur un 4K de 32" des boutons de
+# près de 3 cm (retour d'utilisateur du 24/11/2026 : « les boutons sont énormes »). Le PC réduit l'interface pour
+# qu'un bouton du HUD (64 unités de toile) fasse ~12 mm à l'écran, d'après la densité physique ; la 3D reçoit le
+# facteur (content_scale_factor), la barre et le pupitre Qt le suivent.
+UI_BOUTON_MM = 12.0
+_FACTEUR_UI = [1.0]
+
+
+def facteur_ui_3d(largeur_px: float, hauteur_px: float, dpi: float) -> float:
+    """Réduction de l'interface de la vue 3D (0,5 à 1) : largeur et hauteur en pixels physiques, dpi physique."""
+    if not (50.0 <= dpi <= 600.0):
+        return 1.0
+    k = max(0.2, min(largeur_px / 1600.0, hauteur_px / 900.0))
+    mm = 64.0 * k * 25.4 / dpi
+    return max(0.5, min(1.0, UI_BOUTON_MM / mm))
+
+
 def echelle_toile_3d(largeur: float, hauteur: float) -> float:
     """Échelle de l'interface de la vue 3D : toile de 1600 × 900 étirée à la
     fenêtre en gardant ses proportions (stretch canvas_items, aspect expand
-    de project.godot)."""
-    return max(0.2, min(largeur / 1600.0, hauteur / 900.0))
+    de project.godot), réduite du facteur d'interface du PC."""
+    return max(0.2, min(largeur / 1600.0, hauteur / 900.0)) * _FACTEUR_UI[0]
 
 
 class BoutonHud(QPushButton):
@@ -7643,8 +7765,10 @@ class PupitreSurimpression(QWidget):
         # la carte des pistes (retour d'utilisateur du 19/11/2026, plein écran 4K). En conduite, à droite comme
         # avant. Déplaçable par son en-tête : la place choisie est gardée (fraction de la vue), bornée à l'écran.
         k = echelle_toile_3d(zone.width(), zone.height())
+        # (réduit avec l'interface de la 3D, mais moins : ses textes sont petits)
+        f = max(0.6, min(1.0, _FACTEUR_UI[0] * 1.4))
         s = max(0.45, min(zone.height() * 0.66 / self.HAUTEUR, zone.width() * 0.21 / self.LARGEUR,
-                          (zone.height() - 90 * k) / self.HAUTEUR))
+                          (zone.height() - 90 * k) / self.HAUTEUR) * f)
         w = int(self.LARGEUR * s)
         h = int((self.BANDEAU if self.replie else self.HAUTEUR) * s)
         skieur = bool(getattr(self._jeu, "_skieur", False))
@@ -7671,6 +7795,15 @@ class PupitreSurimpression(QWidget):
 
     def signature(self) -> tuple:
         return (self.replie, self._s, self.width(), self.height(), self._jeu._signature_pupitre())
+
+    def intervalle(self) -> float:
+        """Délai minimal entre deux images du pupitre : aucun tant que le dessin est bon marché (~1 à 2 ms en 4K,
+        mesuré le 24/11/2026), 30 puis 10 images par seconde au plus si une machine lente y passe plus de temps."""
+        r = sorted(ms for ms, refaite in self.peintures[-40:] if refaite)
+        if len(r) < 5:
+            return 0.0
+        m = r[len(r) // 2]
+        return 0.0 if m < 4.0 else (1.0 / 30.0 if m < 8.0 else 0.1)
 
     def paintEvent(self, _ev) -> None:  # noqa: N802
         # Le pupitre est rendu à pleine opacité dans une image gardée, refaite seulement quand ce qu'il montre a
@@ -8170,6 +8303,11 @@ class GameWidget(QWidget):
             if self._faux_remontee is None:
                 self._recevoir_remontee(m["remontee"])
             return
+        if "remontee_v" in m:
+            # paquet léger (~30/s) : seulement les aiguilles, repeintes à la prochaine image
+            if self._faux_remontee is None:
+                self._remontee.recevoir_vite(m["remontee_v"])
+            return
         if "pique_remontee" in m:
             self._recevoir_pique_remontee(m["pique_remontee"])
             return
@@ -8188,7 +8326,12 @@ class GameWidget(QWidget):
             if (m["hd_possible"] and self._decor_hd != "non"
                     and self._godot_bridge is not None and self._godot_bridge.donnees is not None):
                 import pack_hd
+                neuf = pack_hd.dossier_si_pret(self._godot_bridge.donnees) is None
                 pack_hd.demarrer(self._godot_bridge.donnees)
+                # première installation : fenêtre de progression, REDÉMARRER à la fin (24/11/2026)
+                if neuf and getattr(self, "_fenetre_pack_hd", None) is None:
+                    self._fenetre_pack_hd = PackHdDialog(self.window())
+                    self._fenetre_pack_hd.show()
         elif m.get("pack_hd_abime") or m.get("hd_illisible"):
             # la vue 3D n'a pas su lire le pack installé (fichier abîmé) : le
             # marqueur ne revérifie rien, sans ceci le repli sur le relief
@@ -9272,6 +9415,7 @@ class GameWidget(QWidget):
                 state_dict["skieur_auto"] = self._skieur_boucle_n
                 state_dict["skieur_vue_ligne"] = self._skieur_vue_ligne_n
                 state_dict["skieur_poste_fermer"] = self._skieur_poste_fermer_n
+                state_dict["echelle_ui"] = self._facteur_ui()
                 state_dict["exploitation"] = bool(self.auto_ops.enabled)
                 # panneau des départs de la gare aval en rouge « fermé »
                 state_dict["hors_service"] = bool(
@@ -9700,7 +9844,8 @@ class GameWidget(QWidget):
         if not b.isVisible():
             b.show()
             b.raise_()
-        # pupitre en surimpression : caché sous l'aide (elle prend l'écran), repeint à 10 Hz ; caché aussi quand le
+        # pupitre en surimpression : caché sous l'aide (elle prend l'écran), repeint à chaque image où ce qu'il montre
+        # change (aiguilles fluides, retour d'utilisateur du 24/11/2026), moins souvent si le dessin coûte ; caché aussi quand le
         # poste du skieur est ouvert dans la vue 3D, à sa place (un seul poste de conduite à la fois)
         if self._show_help or (self._skieur and self._poste_skieur_ouvert) or not utile:
             if sp.isVisible():
@@ -9712,9 +9857,9 @@ class GameWidget(QWidget):
                 sp.show()
                 sp.raise_()
             maintenant = time.monotonic()
-            if maintenant - self._t_surimpression >= 0.2:       # (5 images par seconde au plus)
-                self._t_surimpression = maintenant
+            if maintenant - self._t_surimpression >= sp.intervalle():
                 if sp.signature() != sp._sig:
+                    self._t_surimpression = maintenant
                     sp.update()
 
     def _pupitre_utile(self) -> bool:
@@ -14010,13 +14155,8 @@ class GameWidget(QWidget):
         except Exception as e:
             self._godot_log(f"repli propriétaire échoué : {e}")
 
-    def _reposition_godot_embed(self) -> None:
-        """Place la vue 3D embarquée dans le rect de la vue cabine, mais
-        SOUS la pendule : le pill horloge (top-centre, y 6..38) est peint
-        par Qt, or une fenêtre native enfant passe toujours AU-DESSUS de
-        tout ce que le parent peint (airspace Win32/X11) — avec y=20 la
-        pendule était « masquée à moitié » (retour 2026-07-23). Le haut
-        de la 3D démarre donc à 44 px ; le bord bas reste inchangé."""
+    def _geometrie_3d(self) -> tuple:
+        """Rect de la vue 3D embarquée dans le widget (x, y, largeur, hauteur, en pixels logiques)."""
         # (toile virtuelle × échelle de l'interface, cf. _ui_k)
         k = self._ui_k()
         w, h = self._ui_taille(k)
@@ -14026,6 +14166,26 @@ class GameWidget(QWidget):
             # toute la fenêtre (F12 / skieur loin du funiculaire)
             x, y = 0, 0
             ww, hh = self.width(), self.height()
+        return x, y, ww, hh
+
+    def _facteur_ui(self) -> float:
+        """Facteur d'interface de la vue 3D (facteur_ui_3d) pour sa taille actuelle et l'écran de la fenêtre."""
+        scr = self.screen()
+        dpr = self.devicePixelRatioF()
+        dpi = float(scr.physicalDotsPerInch()) if scr is not None else 0.0
+        _x, _y, ww, hh = self._geometrie_3d()
+        f = round(facteur_ui_3d(ww * dpr, hh * dpr, dpi), 2)
+        _FACTEUR_UI[0] = f
+        return f
+
+    def _reposition_godot_embed(self) -> None:
+        """Place la vue 3D embarquée dans le rect de la vue cabine, mais
+        SOUS la pendule : le pill horloge (top-centre, y 6..38) est peint
+        par Qt, or une fenêtre native enfant passe toujours AU-DESSUS de
+        tout ce que le parent peint (airspace Win32/X11) — avec y=20 la
+        pendule était « masquée à moitié » (retour 2026-07-23). Le haut
+        de la 3D démarre donc à 44 px ; le bord bas reste inchangé."""
+        x, y, ww, hh = self._geometrie_3d()
         # Chemin Windows : MoveWindow sur le HWND enfant (coords device px).
         if self._godot_child_hwnd:
             try:
@@ -16596,7 +16756,8 @@ class GameWidget(QWidget):
         du modèle (paquet différent du précédent, commande envoyée). PN : valeurs affichées, arrondies comme à
         l'écran (vitesse, câble, consigne, temps, touches tenues, pannes)."""
         if self._remontee_affichee():
-            return ("r", self._remontee.version, T("en", "fr"), int(time.monotonic() * 2) % 2)
+            return ("r", self._remontee.version, self._remontee.signature_aiguilles(), T("en", "fr"),
+                    int(time.monotonic() * 2) % 2)
         st = self.state
         tr = st.train
         return ("pn", st.mode, round(vitesse_roues(st), 2), round(tr.tension_dan_disp, -1), round(tr.speed_cmd, 3), round(tr.brake, 2), bool(tr.electric_stop),
@@ -16612,7 +16773,7 @@ class GameWidget(QWidget):
         p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 10, 10)
         st = self.state
         if self._remontee_affichee():
-            d = self._remontee.d or {}
+            d = self._remontee.d_affiche() or {}
             nom = str(d.get("nom", ""))
             v = abs(float(d.get("v", 0.0) or 0.0))
             (lib, coul) = self._ETATS_REMONTEE.get(str(d.get("etat", "")), ((str(d.get("etat", "")),) * 2, COLOR_TEXT))
@@ -16630,7 +16791,9 @@ class GameWidget(QWidget):
             alarme = bool(st.panne_active)
         p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.DemiBold))
         p.setPen(_cached_pen(COLOR_TEXT))
-        p.drawText(QRectF(rect.x() + 14, rect.y(), 150, rect.height()), int(Qt.AlignmentFlag.AlignVCenter), nom)
+        # (nom raccourci avant la vitesse : « TSD6 Marmottes Express » passait dessous, retour du 24/11/2026)
+        nom = p.fontMetrics().elidedText(nom, Qt.TextElideMode.ElideRight, 128)
+        p.drawText(QRectF(rect.x() + 14, rect.y(), 130, rect.height()), int(Qt.AlignmentFlag.AlignVCenter), nom)
         p.setFont(_cached_font("Consolas", 12, QFont.Weight.Bold))
         p.setPen(_cached_pen(COLOR_NEEDLE))
         p.drawText(QRectF(rect.x() + 150, rect.y(), 100, rect.height()), int(Qt.AlignmentFlag.AlignVCenter),
@@ -16789,10 +16952,14 @@ class GameWidget(QWidget):
         p.drawRoundedRect(rect, 10, 10)
         p.setPen(_cached_pen(COLOR_TEXT))
         p.setFont(_cached_font("Segoe UI", 13, QFont.Weight.DemiBold))
-        p.drawText(QRectF(x0 + 14, y0 + 8, wr - 130, 22), int(Qt.AlignmentFlag.AlignLeft), titre)
+        # (raccourcis avant le bouton AUTO / MANUEL : un nom long passait dessous)
+        el = Qt.TextElideMode.ElideRight
+        p.drawText(QRectF(x0 + 14, y0 + 8, wr - 140, 22), int(Qt.AlignmentFlag.AlignLeft),
+                   p.fontMetrics().elidedText(titre, el, int(wr - 140)))
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.setFont(_cached_font("Segoe UI", 8))
-        p.drawText(QRectF(x0 + 14, y0 + 30, wr - 130, 16), int(Qt.AlignmentFlag.AlignLeft), sous_titre)
+        p.drawText(QRectF(x0 + 14, y0 + 30, wr - 140, 16), int(Qt.AlignmentFlag.AlignLeft),
+                   p.fontMetrics().elidedText(sous_titre, el, int(wr - 140)))
 
     def _zone_remontee(self, r: QRectF, action: tuple) -> None:
         self._zones_remontee.append((QRectF(r), action))
@@ -16802,7 +16969,7 @@ class GameWidget(QWidget):
         panne en cours (quoi / à faire / interdit). Toutes les familles ; le Funival et les téléphériques ont
         en plus le schéma du va-et-vient."""
         import pupitre_remontee as pr
-        d = self._remontee.d or {}
+        d = self._remontee.d_affiche() or {}
         g = str(d.get("groupe", ""))
         x0, y0, wr = rect.x(), rect.y(), rect.width()
         # fond et en-tête (nom, description) : rendus une fois par ligne et par taille
@@ -16890,6 +17057,14 @@ class GameWidget(QWidget):
             info += T(" · service brake", " · frein service")
         p.drawText(QRectF(x0 + 16, y, wr - 32, 20), int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), info)
         y += 24
+        # trajet (parcouru, reste) : repris du poste de la 3D, qui ne s'affiche plus sur le PC (24/11/2026)
+        trajet = str(d.get("trajet", "") or "")
+        if trajet:
+            p.setFont(_cached_font("Consolas", 8))
+            p.setPen(_cached_pen(COLOR_TEXT_DIM))
+            p.drawText(QRectF(x0 + 16, y - 4, wr - 32, 14), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                       trajet)
+            y += 12
         refus = str(d.get("refus_depart", "") or "")
         if refus:
             p.setFont(_cached_font("Segoe UI", 8))

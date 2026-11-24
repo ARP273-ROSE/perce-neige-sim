@@ -54,6 +54,10 @@ class ModeleRemontee:
         self.version = 0                          # avance quand ce qui est affiché peut avoir changé
         self.pique: tuple | None = None           # (n, fr, en, ligne, instant de réception)
         self._n_pique = -1
+        # aiguilles fluides (retour d'utilisateur du 24/11/2026 : « c'est saccadé ») : derniers relevés de vitesse,
+        # puissance et positions du va-et-vient (télémesure complète ~5/s, paquet léger ~30/s), affichés un peu en
+        # différé et interpolés entre deux relevés
+        self._ech: list[tuple] = []               # (instant, v, kW, positions)
 
     # --- réception ---
     def recevoir(self, d: dict | None, maintenant: float | None = None, octets: int = 0) -> list:
@@ -69,8 +73,12 @@ class ModeleRemontee:
         if d != self.d:
             # (paquet identique au précédent : rien à redessiner)
             self.version += 1
+        if self.d is None or self.d.get("id") != d.get("id"):
+            self._ech = []
         self.d = d
         self.t_recu = maintenant
+        vv = d.get("va_et_vient")
+        self._echantillon(maintenant, d.get("v"), d.get("kw"), vv.get("pos") if isinstance(vv, dict) else None)
         lid = str(d["id"])
         if isinstance(d.get("catalogue"), list):
             self.catalogue[lid] = [c for c in d["catalogue"] if isinstance(c, dict) and c.get("id")]
@@ -92,6 +100,71 @@ class ModeleRemontee:
                 vu = int(e[0])
         self._evts_vus[lid] = vu
         return nouveaux
+
+    # --- lissage des aiguilles ---
+    RETARD_S = 0.07         # affichage en différé : de quoi avoir toujours un relevé de part et d'autre
+    N_ECH = 12
+
+    def _echantillon(self, t: float, v, kw, pos) -> None:
+        def nombre(x) -> float:
+            try:
+                x = float(x)
+            except (TypeError, ValueError):
+                return 0.0
+            return x if math.isfinite(x) else 0.0
+        p = tuple(nombre(x) for x in pos) if isinstance(pos, (list, tuple)) else ()
+        if self._ech and t <= self._ech[-1][0]:
+            self._ech[-1] = (t, nombre(v), nombre(kw), p)
+        else:
+            self._ech.append((t, nombre(v), nombre(kw), p))
+        del self._ech[:-self.N_ECH]
+
+    def recevoir_vite(self, paquet, maintenant: float | None = None) -> bool:
+        """Paquet léger [id, v, kW, positions] entre deux télémesures ; vrai s'il concerne la ligne affichée."""
+        maintenant = time.monotonic() if maintenant is None else maintenant
+        if not isinstance(paquet, (list, tuple)) or len(paquet) < 3 or not self.d:
+            return False
+        if str(paquet[0]) != str(self.d.get("id")):
+            return False
+        self._echantillon(maintenant, paquet[1], paquet[2], paquet[3] if len(paquet) > 3 else None)
+        return True
+
+    def lisse(self, maintenant: float | None = None) -> tuple:
+        """(v, kW, positions) à l'instant affiché, interpolés entre les deux relevés qui l'encadrent."""
+        maintenant = time.monotonic() if maintenant is None else maintenant
+        e = self._ech
+        if not e:
+            d = self.d or {}
+            return float(d.get("v", 0.0) or 0.0), float(d.get("kw", 0.0) or 0.0), ()
+        t = maintenant - self.RETARD_S
+        if t <= e[0][0]:
+            return e[0][1], e[0][2], e[0][3]
+        if t >= e[-1][0]:
+            return e[-1][1], e[-1][2], e[-1][3]
+        for i in range(len(e) - 1, 0, -1):
+            a, b = e[i - 1], e[i]
+            if a[0] <= t <= b[0]:
+                f = (t - a[0]) / max(b[0] - a[0], 1e-6)
+                pos = tuple(x + (y - x) * f for x, y in zip(a[3], b[3])) if len(a[3]) == len(b[3]) else b[3]
+                return a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, pos
+        return e[-1][1], e[-1][2], e[-1][3]
+
+    def d_affiche(self, maintenant: float | None = None) -> dict | None:
+        """La télémesure, avec vitesse, puissance et positions lissées (ce que dessine le pupitre)."""
+        if not self.d:
+            return self.d
+        v, kw, pos = self.lisse(maintenant)
+        d = dict(self.d)
+        d["v"], d["kw"] = v, kw
+        vv = d.get("va_et_vient")
+        if isinstance(vv, dict) and pos and len(pos) == len(vv.get("pos") or ()):
+            d["va_et_vient"] = dict(vv, pos=list(pos))
+        return d
+
+    def signature_aiguilles(self, maintenant: float | None = None) -> tuple:
+        """Ce qui bouge entre deux paquets, arrondi comme à l'écran : rien de changé, rien à redessiner."""
+        v, kw, pos = self.lisse(maintenant)
+        return round(abs(v), 2), round(kw), tuple(round(x, 3) for x in pos)
 
     # --- piques (message {"pique_remontee": {n, evt, ligne, fr, en}} de la 3D) ---
     PIQUE_S = 8.0           # affichée au pupitre pendant

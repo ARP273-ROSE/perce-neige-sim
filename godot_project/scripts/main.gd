@@ -105,6 +105,8 @@ var _skieur_etat_envoye: Array = []
 # Télémesure du pupitre de la remontée vers le PC (_cuites/chantier_pupitres/SPEC.md) : ~5 paquets/s, catalogue des
 # pannes à l'arrivée sur une ligne puis toutes les 5 s, {"remontee": null} quand on s'en éloigne
 var _t_remontee: float = 0.0
+# + un paquet léger ~30 fois par seconde (vitesse, puissance, véhicules du va-et-vient) : aiguilles fluides au PC
+var _t_remontee_v: float = 0.0
 var _t_catalogue: float = 0.0
 var _remontee_envoyee: String = ""
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
@@ -3279,10 +3281,16 @@ func _maj_skieur() -> void:
 func _envoyer_remontee(delta: float) -> void:
 	_t_remontee -= delta
 	_t_catalogue -= delta
+	_t_remontee_v -= delta
+	var lg: LigneRemontee = commandes_skieur.ligne_suivie if commandes_skieur != null and mode_skieur else null
 	if _t_remontee > 0.0:
+		if _t_remontee_v <= 0.0 and _remontee_envoyee != "" and lg != null and is_instance_valid(lg) and lg.pret \
+				and String(lg.name) == _remontee_envoyee:
+			_t_remontee_v = 1.0 / 30.0
+			state_receiver.envoyer({"remontee_v": lg.exploitation().etat_rapide()})
 		return
 	_t_remontee = 0.2
-	var lg: LigneRemontee = commandes_skieur.ligne_suivie if commandes_skieur != null and mode_skieur else null
+	_t_remontee_v = 1.0 / 30.0
 	if lg == null or not is_instance_valid(lg) or not lg.pret:
 		if _remontee_envoyee != "":
 			_remontee_envoyee = ""
@@ -3294,7 +3302,11 @@ func _envoyer_remontee(delta: float) -> void:
 		_t_catalogue = 5.0
 	_remontee_envoyee = id
 	var a_bord: bool = remontees != null and lg in remontees.a_bord
-	state_receiver.envoyer({"remontee": lg.exploitation().etat_pupitre(a_bord, cat)})
+	var etat: Dictionary = lg.exploitation().etat_pupitre(a_bord, cat)
+	var po: PosteRemontee = commandes_skieur.poste
+	if po != null and po.ligne == lg:
+		etat["trajet"] = po.texte_trajet()
+	state_receiver.envoyer({"remontee": etat})
 
 
 # --- heure de jeu : jour, aube, crépuscule, nuit (19/11/2026) ------------------------------------------------------
