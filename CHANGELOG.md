@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Prochaine version (non publiée)
+## 1.77.1 — 24 novembre 2026
 
 - **Garde-corps des sièges vides relevé** (retour d'utilisateur du 24/11/2026 : « sur les TSD sans bulle et les TSF,
   ce sont les usagers qui ferment le garde-corps ; les sièges vides montent et descendent garde-corps ouvert »). Siège
