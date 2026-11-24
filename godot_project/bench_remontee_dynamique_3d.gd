@@ -96,15 +96,8 @@ func _initialize() -> void:
 			elif tk > 20.0 and tk < 30.0:
 				a2 = maxf(a2, absf(phis[k]))
 		print("  balancement : %.1f° à la sortie du lanceur, %.2f° 20 s plus tard (masse %.0f kg)" % [rad_to_deg(amp), rad_to_deg(a2), v0.masse])
-		if lg.famille.begins_with("cabine"):
-			# cabine : tenue par son guide en gare et dans la courbe de sortie, elle n'emporte pas de balancement en
-			# ligne (vidéo iPad du 24/11/2026 : l'Olympique, lâchée penchée de 11° au bout du lanceur, balançait de
-			# ±14° pendant des minutes) ; seuls les pylônes et le vent la font bouger, peu
-			_verif("balancement : cabine guidée, pas de balancement emporté de la gare", amp < deg_to_rad(1.0)
-				and a1 < deg_to_rad(1.5) and a2 < deg_to_rad(1.5), "%.2f° → %.2f°" % [rad_to_deg(a1), rad_to_deg(a2)])
-		else:
-			_verif("balancement : le véhicule balance à la sortie du lanceur, puis s'amortit", amp > deg_to_rad(0.8) and a2 < a1 * 0.7,
-				"%.1f° → %.2f°" % [rad_to_deg(a1), rad_to_deg(a2)])
+		_verif("balancement : le véhicule balance à la sortie du lanceur, puis s'amortit", amp > deg_to_rad(0.8) and a2 < a1 * 0.7,
+			"%.1f° → %.2f°" % [rad_to_deg(a1), rad_to_deg(a2)])
 		# 4. gares : véhicules dans la partie lente (entre les deux lanceurs)
 		var lente: int = 0
 		var lanceurs: int = 0

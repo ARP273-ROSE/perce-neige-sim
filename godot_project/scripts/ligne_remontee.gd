@@ -8014,13 +8014,7 @@ func _placer(i: int) -> void:
 			v.psi0 += atan(_k_aire * vx * absf(vx) / (v.masse * 9.81))
 		v.limite_psi = limite_guide(s)
 		# siège à pince fixe : pas de guide en gare, il balance librement autour de la poulie
-		# (cabine : encore guidée dans la courbe de sortie de gare, 15 m — sans quoi le coup vertical de la courbe la
-		# lançait en balancement durable)
-		var guidee: bool = z[0] != "ligne"
-		if not guidee and v.famille.begins_with("cabine"):
-			var dg: float = -(pt[0] as Vector3).z
-			guidee = dg < NEZ_3S + 15.0 or dg > longueur_h() - NEZ_3S - 15.0
-		v.balancer(_dt, guidee, fixe())
+		v.balancer(_dt, z[0] != "ligne", fixe())
 		v.masse = m0
 	# corps de collision (base directe) : suit aussi le balancement — sur les
 	# lignes proches seulement (déplacer des centaines de corps à chaque

@@ -7,15 +7,6 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Prochaine version (non publiée)
 
-- **Cabine du 3S qui balançait sous le chariot** (vidéo iPad du 24/11/2026, Olympique : « c'est une oscillation
-  verticale du câble qui se propage, suivie par le chariot, pas le décor »). Mesuré sur la vidéo puis reproduit sans
-  le module C++ : la cabine où l'on est assis balançait d'avant en arrière de ±14° avec une période de ~4 s ; vue
-  depuis la cabine, c'est le chariot et les câbles qui semblaient monter et descendre. Cause : en gare, rien ne
-  retenait la cabine ; à 1,8 m/s² dans le lanceur elle penchait de 11°, puis, lâchée d'un coup à la sortie, elle
-  balançait, à peine amortie (lourde). Une cabine est tenue par son guide en gare et dans la courbe de sortie : la
-  pince la garde droite d'avant en arrière jusqu'à 15 m au-delà du nez de la gare. Sièges inchangés (ils balancent
-  toujours à la sortie du lanceur). Mesuré : 14° → 0,04° (cabine vide en ligne : 0,1°). Nouveau banc
-  bench_3s_balancement_3d ; bench_remontee_dynamique distingue cabine guidée et siège.
 - **PWA : barre du haut qui se chevauchait sur iPad** (capture iPad du 24/11/2026 : « les boutons sont trop gros et
   se chevauchent »). Plus longue depuis les noms clarifiés de la 1.77.0, elle passait sous PANNE sur un écran 4:3, et
   MODE SKIEUR sur deux lignes la faisait descendre sur le panneau de la salle des machines. MODE SKIEUR tient sur une
