@@ -868,6 +868,11 @@ func balancer(dt: float, en_gare: bool, libre: bool = false) -> void:
 	# chaque sommet de l'arc de la poulie donnait une secousse au balancier
 	_a_f = _a_f.lerp(a, minf(1.0, dt * (3.0 if en_gare else 15.0)))
 	var la: Vector3 = transform.basis.inverse() * _a_f
+	# cabine en gare : tenue par le rail de guidage, elle ne penche pas sous l'accélération du lanceur. Sans ce guide,
+	# l'Olympique penchait de 11° à 1,8 m/s² puis, lâchée à la sortie, balançait de ±14° pendant des minutes, le
+	# chariot restant sur le câble (vidéo iPad du 24/11/2026 : « oscillation verticale du câble suivie par le chariot »)
+	if en_gare and not libre and (cabine or famille.begins_with("cabine")):
+		la.z = 0.0
 	var g2: float = 9.81 + _a_f.y
 	var L: float = longueur_pendule
 	var w0: float = sqrt(9.81 / L)

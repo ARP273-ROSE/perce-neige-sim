@@ -31,6 +31,7 @@ var _b_tunnel: Button = null         # éclairage du tunnel (enfoncé = allumé)
 var _b_lights: Button = null         # phares (enfoncé = allumés)
 var _b_cabin: Button = null          # éclairage cabine (enfoncé = allumé)
 var _b_doors: Button = null          # portes (enfoncé = ouvertes)
+var _top: HBoxContainer = null     # barre du haut (réduite à la place disponible)
 var _b_skieur: Button = null         # skieur jouable (enfoncé = actif)
 var _col_gauche: Control = null      # colonnes de conduite (masquées en skieur)
 var _col_droite: Control = null
@@ -297,6 +298,11 @@ func _build() -> void:
 	top.offset_top = 10.0
 	top.add_theme_constant_override("separation", 10)
 	root.add_child(top)
+	_top = top
+	# (iPad 4:3, 24/11/2026 : « les boutons sont trop gros et se chevauchent » — la barre, plus longue avec les noms
+	# clarifiés, passait sous PANNE à gauche) : réduite à la place qui reste à droite de PANNE
+	get_viewport().size_changed.connect(_ajuster_barre)
+	top.resized.connect(_ajuster_barre)
 
 	# INVERSER : demi-tour sur place (rame à l'arrêt total, à quai ou en
 	# plein tunnel — cas panne : on redescend chercher la gare). Appel
@@ -367,7 +373,7 @@ func _build() -> void:
 
 	# SKIEUR (07/10/2026) : le skieur jouable — on marche dans les gares,
 	# on prend le funiculaire, on va au poste (touche K)
-	_b_skieur = _mk_button("MODE\nSKIEUR", "Mode skieur : marcher et skier sur le domaine (touche F9 ou K)")
+	_b_skieur = _mk_button("MODE SKIEUR", "Mode skieur : marcher et skier sur le domaine (touche F9 ou K)")
 	_b_skieur.custom_minimum_size = Vector2(112, 56)
 	_b_skieur.toggle_mode = true
 	_b_skieur.pressed.connect(func() -> void:
@@ -540,3 +546,14 @@ func _toggle_announce_menu() -> void:
 func _play_announcement(key: String) -> void:
 	if _main != null and _main.announcements != null:
 		_main.announcements.play_now(key)
+
+
+## Barre du haut : réduite (même proportion) pour tenir entre le bouton PANNE (x 320 + 102) et le bord droit.
+func _ajuster_barre() -> void:
+	if _top == null:
+		return
+	var w: float = _top.get_combined_minimum_size().x
+	var dispo: float = _top.get_viewport_rect().size.x - 6.0 - (320.0 + 102.0 + 12.0)
+	var e: float = clampf(dispo / maxf(w, 1.0), 0.5, 1.0)
+	_top.pivot_offset = Vector2(_top.size.x, 0.0)
+	_top.scale = Vector2(e, e)
