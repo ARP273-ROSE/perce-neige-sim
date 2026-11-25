@@ -453,6 +453,12 @@ func _process_corps(delta: float) -> void:
 		# boutons en double sur le PC (retour d'utilisateur du 19/11/2026) : QUITTER = CONDUIRE de la barre du PC
 		if _b_quitter != null and _b_quitter.visible == bool(main.get("client_mode")):
 			_b_quitter.visible = not bool(main.get("client_mode"))
+		# SERVICE AUTO : sur le PC, le pupitre du Perce-Neige l'a déjà (EXPL. AUTO, X) quand c'est lui qui est affiché,
+		# c'est-à-dire hors d'une remontée (retour d'utilisateur du 25/11/2026 : « boutons en doublon, fais le ménage »)
+		if _b_exploit != null:
+			var vis_x: bool = not bool(main.get("client_mode")) or ligne_suivie != null
+			if _b_exploit.visible != vis_x:
+				_b_exploit.visible = vis_x
 		_suivre_clavier()
 	if _t_pique > 0.0:
 		_t_pique -= delta

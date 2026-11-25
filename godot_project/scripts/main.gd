@@ -1348,10 +1348,14 @@ func _suite_process(delta: float) -> void:
 				# PWA : l'ambiante n'y lit pas le ciel ; dehors, on lui rend la part que le PC tire du ciel et de la neige
 				if _compat:
 					_env.ambient_light_color = AMBIANCE_WEB + (AMBIANCE_WEB_NEIGE if etat_sol == 2 else Color(0, 0, 0, 0))
-			# dehors il fait jour, même tunnel éteint
-			var ciel: float = 1.0 if (ext or tunnel_lights_on) else 0.0
+			# dehors il fait jour, même tunnel éteint ; et l'éclairage du tunnel du Perce-Neige ne coupe que lui : skieur
+			# ailleurs (Funival, domaine), le ciel reste (retour d'utilisateur du 25/11/2026 : « tunnel éteint le soleil
+			# dehors alors que c'est juste l'intérieur du tunnel à éteindre »)
+			var ciel: float = 1.0 if (ext or tunnel_lights_on or (mode_skieur and not skieur_au_perce_neige())) else 0.0
 			if _env.background_energy_multiplier != ciel:
 				_env.background_energy_multiplier = ciel
+				_env.sdfgi_energy = ciel
+				_env.volumetric_fog_gi_inject = 0.5 * ciel
 				_energie_ciel(ciel)
 	# gare aval : portes coulissantes et panneau des départs
 	if station_halls != null and physics != null:
@@ -3146,6 +3150,10 @@ func _skieur_en_gare() -> bool:
 ## « arrivé en haut du funi Perce-Neige pour descendre avec, il croyait que j'étais dans le TSD Vanoise à côté » —
 ## le poste prenait la remontée la plus proche, la gare du Vanoise étant à quelques dizaines de mètres).
 func skieur_au_perce_neige() -> bool:
+	# (au Funival, voisin du Perce-Neige à Val Claret : c'est lui, ses phares et son pupitre — retour d'utilisateur du
+	# 25/11/2026 : « sur le Funival, PHARES n'éteint pas les phares », c'étaient ceux de la rame)
+	if skieur != null and remontees != null and remontees.funival_ou(skieur.global_position) != null:
+		return false
 	return _skieur_en_gare() or _rame_du_skieur() != null
 
 

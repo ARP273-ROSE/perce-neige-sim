@@ -923,14 +923,18 @@ func _marquer_voie(n: Node) -> void:
 		c.set_meta(MeshMerge.SANS_FUSION, true)
 
 
-## Dehors : poutre en U de béton gris clair sur piles courtes à chevêtre, passerelle de service en caillebotis
-## d'un côté, main courante. (Dans le tunnel, rails et radier sont dans le maillage cuit.)
+## Dehors : poutre en U étroite, de la largeur des rails, sur chevalets à chevêtre — rien autour, ni passerelle ni main
+## courante (retour d'utilisateur du 25/11/2026, vidéo de la montée vue de l'arrière : « en haut ya juste la largeur
+## des rails et rien autour »). (Dans le tunnel, rails et radier sont dans le maillage cuit.)
+const DEMI_POUTRE: float = 0.95          # m : demi-largeur hors tout de la poutre (rails à ±0,60)
 func _voie_et_ouvrages() -> void:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	# (rails, blochets, dalle et galets : TrackBuilder, dans _tunnel ; poutre plus profonde pour la fosse des galets)
-	var u: PackedVector2Array = PackedVector2Array([Vector2(-1.75, 0.55), Vector2(-1.75, -1.3), Vector2(1.75, -1.3),
-		Vector2(1.75, 0.55), Vector2(1.6, 0.55), Vector2(1.6, -1.15), Vector2(-1.6, -1.15), Vector2(-1.6, 0.55)])
+	var hp: float = DEMI_POUTRE
+	var u: PackedVector2Array = PackedVector2Array([Vector2(-hp, 0.10), Vector2(-hp, -1.3), Vector2(hp, -1.3),
+		Vector2(hp, 0.10), Vector2(hp - 0.12, 0.10), Vector2(hp - 0.12, -1.15), Vector2(-hp + 0.12, -1.15),
+		Vector2(-hp + 0.12, 0.10)])
 	_extruder(st, u, 30.0, portail_d + 2.0, PAS_PROFIL, -1, true)
 	_maillage(st, mat_funi("beton_clair"), "Poutre")
 	# longrines sous les rails, du fond de la poutre au patin (photos : « deux rails sur longrines, pas de traverses
@@ -957,26 +961,16 @@ func _voie_et_ouvrages() -> void:
 			var h: float = y - sol + 0.6
 			var e: float = maxf(0.9, h * 0.25)
 			for sx in [-1.0, 1.0]:
-				RemonteeKit.poutre(ouv, Vector3(sx * e, sol - 0.6, -d), Vector3(sx * 0.85, y - 0.4, -d), 0.32, 0.45, "peinture_anthracite")
+				RemonteeKit.poutre(ouv, Vector3(sx * e, sol - 0.6, -d), Vector3(sx * 0.7, y - 0.4, -d), 0.32, 0.45, "peinture_anthracite")
 			var n_e: int = 0 if h < 5.0 else (1 if h < 9.0 else 2)
 			for ke in range(n_e):
 				var fy: float = float(ke + 1) / float(n_e + 1)
 				var ye: float = lerpf(sol - 0.6, y - 0.4, fy)
-				var xe: float = lerpf(e, 0.85, fy)
+				var xe: float = lerpf(e, 0.7, fy)
 				RemonteeKit.poutre(ouv, Vector3(-xe, ye, -d), Vector3(xe, ye, -d), 0.18, 0.25, "peinture_anthracite")
-			RemonteeKit.boite_en(ouv, Vector3(2.6, 0.45, 0.8), Vector3(0, y - 0.22, -d), "peinture_anthracite")
+			RemonteeKit.boite_en(ouv, Vector3(2.0 * DEMI_POUTRE + 0.1, 0.45, 0.8), Vector3(0, y - 0.22, -d), "peinture_anthracite")
 		d += 18.0
 	MeshMerge.merge(ouv, [], "Ouvrage")
-	st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_extruder(st, PackedVector2Array([Vector2(1.75, 0.05), Vector2(2.55, 0.05), Vector2(2.55, -0.02), Vector2(1.75, -0.02)]),
-		30.0, portail_d, 10.0)
-	_maillage(st, RemonteeKit.mat("caillebotis"), "Passerelle")
-	st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_extruder(st, PackedVector2Array([Vector2(2.52, 1.05), Vector2(2.56, 1.05), Vector2(2.56, 1.0), Vector2(2.52, 1.0)]),
-		30.0, portail_d, 10.0)
-	_maillage(st, RemonteeKit.mat("galva"), "MainCourante")
 
 
 ## Tunnel, vu de l'intérieur seulement (de dehors, sous la roche, rien) : paroi, radier, rails, passerelle et chemin
@@ -1842,6 +1836,7 @@ func _amenager_batiment(g: Node3D, ys: float, ys_sol: float, zs: float, hx: floa
 
 func _amenager_relief() -> void:
 	_percer_portail()
+	_percer_viaduc()
 	await _amenager_relief_amont()
 
 
@@ -1859,7 +1854,7 @@ func _volumes_portail() -> Array:
 	var y_haut: float = R_TUNNEL + 0.7 + 0.05            # dessus du toit
 	# (tronçons de 4 m environ, ReliefBuilder.MAX_VOLUMES au plus)
 	var d0: float = portail_d - 0.5
-	var n: int = clampi(int(ceil((_d_tranchee - d0) / 4.0)), 1, ReliefBuilder.MAX_VOLUMES - N_VOLUMES_SALLE)
+	var n: int = clampi(int(ceil((_d_tranchee - d0) / 4.0)), 1, ReliefBuilder.MAX_VOLUMES - N_VOLUMES_SALLE - N_VOLUMES_VIADUC)
 	for k in range(n):
 		var d: float = lerpf(d0, _d_tranchee, float(k) / float(n))
 		var d2: float = lerpf(d0, _d_tranchee, float(k + 1) / float(n))
@@ -1872,6 +1867,49 @@ func _volumes_portail() -> Array:
 		var bs: Basis = b * Basis.from_scale(Vector3(hb, (y_haut - y_bas) * 0.5, demi_l))
 		l.append(xf * Transform3D(bs, c))
 	return l
+
+
+## Bas du viaduc (retour d'utilisateur du 25/11/2026 : « sur ton viaduc en bas, le sol rentre sur la voie ») : la voie y
+## frôle le terrain, qui affleurait entre les rails jusqu'à 0,1 m au-dessus d'eux. Le terrain est percé sous la poutre,
+## de son fond à 1,5 m au-dessus des rails, là où il monte plus haut que le fond — N_VOLUMES_VIADUC tronçons au plus.
+const N_VOLUMES_VIADUC: int = 4
+func _volumes_viaduc() -> Array:
+	var xf: Transform3D = global_transform
+	var bas: float = -1.35
+	var touche: Array = []
+	var d: float = 30.0
+	while d < portail_d - 2.0:
+		var y: float = y_voie(d)
+		var sol: float = -INF
+		for sx in [-1.0, 0.0, 1.0]:
+			sol = maxf(sol, _sol(sx * DEMI_POUTRE, -d))
+		if sol > y + bas:
+			touche.append(d)
+		d += 2.0
+	if touche.is_empty():
+		return []
+	var d0: float = float(touche[0]) - 3.0
+	var d1: float = float(touche[touche.size() - 1]) + 3.0
+	var l: Array = []
+	for k in range(N_VOLUMES_VIADUC):
+		var a: float = lerpf(d0, d1, float(k) / N_VOLUMES_VIADUC) - 0.02
+		var b: float = lerpf(d0, d1, float(k + 1) / N_VOLUMES_VIADUC) + 0.02
+		var y1: float = y_voie(a)
+		var y2: float = y_voie(b)
+		var bs: Basis = Basis(Vector3(DEMI_POUTRE + 0.03, 0.0, 0.0), Vector3(0.0, (1.5 - bas) * 0.5, 0.0),
+			Vector3(0.0, (y2 - y1) * 0.5, -(b - a) * 0.5))
+		var c: Vector3 = Vector3(0.0, (y1 + y2) * 0.5 + (1.5 + bas) * 0.5, -(a + b) * 0.5)
+		l.append(xf * Transform3D(bs, c))
+	return l
+
+
+func _percer_viaduc() -> void:
+	var rel: ReliefBuilder = relief_trous
+	if rel == null or not is_instance_valid(rel) or not is_inside_tree():
+		return
+	var l: Array = _volumes_viaduc()
+	if not l.is_empty():
+		rel.percer_volume("%s_viaduc" % name, l)
 
 
 func _percer_portail() -> void:
@@ -1910,6 +1948,7 @@ func _reboucher_fosses() -> void:
 	if relief_trous != null and is_instance_valid(relief_trous):
 		relief_trous.reboucher_volume("%s_portail" % name)
 		relief_trous.reboucher_volume("%s_salle" % name)
+		relief_trous.reboucher_volume("%s_viaduc" % name)
 
 
 ## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
@@ -2558,6 +2597,21 @@ func sous_la_roche(p: Vector3) -> bool:
 
 
 ## Le point p (monde) est dans la caisse d'un véhicule : le skieur y est porté, la ligne doit tourner à pleine cadence, collisions comprises.
+## Portes du Funival, au rythme de la vidéo de la montée (retour d'utilisateur du 25/11/2026, sons réels) : à l'arrêt,
+## les compresseurs, puis l'ouverture 3 s après (T_OUVERTURE) ; au départ, buzzer, fermeture (14 s de claquements
+## désynchronisés), portes closes T_FERMETURE s avant le départ, le temps du buzzer de départ.
+const T_OUVERTURE: float = 3.0
+const T_FERMETURE: float = 13.0
+
+
+func ouverture_portes() -> float:
+	if _phase != "quai":
+		return 0.0
+	if portes_manu:
+		return _porte_anim
+	return clampf(minf(T_QUAI - _t_quai - T_OUVERTURE, _t_quai - T_FERMETURE) / T_PORTES, 0.0, 1.0)
+
+
 ## Phares allumés (au moins un véhicule) : état du bouton PHARES du pupitre.
 func phares_allumes() -> bool:
 	for e in _vehicules:
@@ -2661,7 +2715,9 @@ func _process_corps(delta: float) -> void:
 		elif etat == "marche" and not (depart_refuse() and _t_quai <= 0.5):
 			_t_quai_tot += delta
 			# (portes encore ouvertes et skieur qui marche à quai ou à bord : on l'attend)
-			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _attendre_skieur(delta)):
+			# (attente avant la fermeture des portes, plus tôt qu'au téléphérique : elles se ferment T_FERMETURE avant
+			# le départ)
+			if not (_t_quai - delta < T_FERMETURE + 2.0 and _t_quai_tot < T_QUAI_MAX and _attendre_skieur(delta)):
 				_t_quai -= delta
 			if _t_quai <= 0.0:
 				_phase = "route"

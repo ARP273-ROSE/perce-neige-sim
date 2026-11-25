@@ -1769,8 +1769,9 @@ func _preparer_nez() -> void:
 	var p_b: float = atan2(y_cable(L) - y_cable(L - e), e)
 	# un pylône juste à la sortie de la gare fait le raccord : pas de batterie en plus. TSF : s'il n'a pas pu rester
 	# à hauteur de gare (relevé pour la garde au sol), le câble y sortait en pente sans un galet — angle fantôme
-	# (Rogoney amont, 5,4°) : la batterie du nez de gare le prend.
-	var tsf: bool = famille.begins_with("siege_fixe") and compressions_nez_tsf
+	# (Rogoney amont, 5,4°) : la batterie du nez de gare le prend. Toutes les lignes depuis le 25/11/2026 (retour
+	# d'utilisateur : « angle fantôme » au départ du Vallon de l'Iseran, câble à 18° au nez ; Bollin à l'arrivée, 13°).
+	var tsf: bool = compressions_nez_tsf
 	_h_nez = [0.0 if _nez_par_pylone[0] and not (tsf and absf(p_a) > PENTE_NEZ_TSF) else _demi_batterie(p_a),
 		0.0 if _nez_par_pylone[1] and not (tsf and absf(p_b) > PENTE_NEZ_TSF) else _demi_batterie(p_b)]
 
@@ -3965,7 +3966,9 @@ func _collisions_fixes() -> void:
 			corps.add_child(cs1)
 	for i in range(0 if teleski() else pylones.size()):
 		var d: float = float(pylones[i]["d"])
-		var t: float = terrain(d)
+		# (au sol affiché, comme le fût dessiné : sur le profil de la ligne, le massif du P7 de Brévières, au bord du
+		# remblai du palier des Boisses, flottait 4 m au-dessus du sol — banc des garde-fous, 25/11/2026)
+		var t: float = minf(terrain(d), _sol(0.0, -d))
 		var h: float = _tetes[i] - t - (PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(pylones[i]) else _dessus_traverse())
 		if tricable():
 			h = _tetes[i] - t - 3.0

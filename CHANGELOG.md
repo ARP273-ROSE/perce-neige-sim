@@ -17,6 +17,39 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
   rapide d'utilisation, pour config modeste ») : 5 pages illustrées, captures neuves en qualité Basse sans décor HD.
 - Test de la fenêtre mémorisée : Qt ramène la fenêtre à la pleine largeur de l'écran virtuel de la CI (800 au lieu
   de 798).
+- **Lignes posées sur le relief LiDAR** : la grille à 5 m reprend le relevé LiDAR HD (glacier fondu de 5 à 30 m
+  depuis le RGE ALTI) ; hauteurs des pylônes recalculées sur ce sol.
+- **Pylônes, angles et gardes au sol** (retours d'utilisateur du 25/11/2026 : « pylône 2 TCD Boisses à 45 m, trop
+  haut », « Tovière en haut et TSD Tufs, angle fantôme avant la gare », « Vallon : le câble sort de la gare en angle,
+  la ligne retour touche par terre au pylône 2 », « check tes pylônes bizarres, tes gardes au sol, tes angles en
+  entrée et sortie de gare ») : relevé de toutes les lignes (angle du câble à chaque pylône contre la capacité de ses
+  galets, garde sous chaque brin, angles aux nez des gares) ; palier commun Brévières / Boisses remonté de 1755 à
+  1768 m (le sol du LiDAR et les fiches : 1766 et 1769 m ; le P2 des Boisses passe de 48 à 9 m) ; précalcul :
+  l'angle pèse 10 fois plus qu'avant face à la garde, la garde est tenue sous les deux brins (sur le vrai sol, plus
+  sous l'axe seul), les hauteurs ne bougent que de 4 m au plus autour des précédentes (repris de zéro, des pylônes
+  montaient à 36 m) ; Leissières et Borsat ne gardent plus leurs hauteurs posées à la main sur l'ancien sol (câble
+  plié de 68° au P7 des Leissières) ; batterie de galets au nez de gare dès que le câble y sort en pente, sur toutes
+  les lignes (Vallon : 18° sans galet au départ). Dépassements nets : 91 → 60.
+- **Funival : sons réels de la montée** (vidéo vue de l'arrière, minutages d'un utilisateur) : intérieur à quai en
+  bas, buzzer et fermeture des portes (claquements désynchronisés), buzzer de départ, démarrage, croisière dehors,
+  entrée du tunnel, croisière dans le tunnel, ralentissement avant l'évitement, croisement et reprise, ralentissement
+  final calé pour finir à l'arrêt, gare du haut, compresseurs puis ouverture des portes. Les portes s'ouvrent 3 s
+  après l'arrêt et sont closes 13 s avant le départ, au rythme de la vidéo.
+- **Funival : viaduc** : poutre étroite de la largeur des rails, sans passerelle ni main courante (comme sur la
+  vidéo) ; en bas, le terrain qui affleurait entre les rails est percé sous la poutre.
+- **Funival : PHARES et TUNNEL** : au Funival (voisin du Perce-Neige à Val Claret), PHARES commande ses phares, plus
+  ceux de la rame ; couper l'éclairage du tunnel du Perce-Neige n'éteint plus le ciel quand le skieur est ailleurs.
+- **Téléphériques : sons de gare** (retour d'utilisateur : « sur le quai on entend une décélération en boucle ») :
+  à vitesse constante, la marche en boucle ; au freinage, la prise du ralentissement du Fornet, calée pour finir à
+  l'arrêt. Grande Motte : sa propre prise en ligne, choisie sans voix sur sa vidéo.
+- **Dameuses** (retours d'utilisateur du 25/11/2026 : « le râteau devant est pas bien fait, fais des chenilles qui
+  tournent », « une dameuse moderne rouge, que ce soit joli », « la fraise à l'arrière, normalement il y a une partie
+  jaune ») : silhouette moderne (poste vitré à pare-brise penché, toit à rampe de phares, capot en gradins) ; lame
+  noire bombée à ailes repliées, grille, couteau, bras de poussée et vérins ; chenilles larges à crampons d'acier qui
+  défilent, barbotin, poulie et galets qui tournent (dans le nuanceur) ; fraise à capot et joues jaunes ; bras de
+  treuil en arc.
+- **Pupitre du PC** : ÉVACUER n'apparaît que lorsqu'il y a de quoi évacuer (panne grave, installation arrêtée) ;
+  SERVICE AUTO quitte la colonne de la 3D quand le pupitre du Perce-Neige (EXPL. AUTO) est affiché.
 
 ## 1.77.2 — 24 novembre 2026
 

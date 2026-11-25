@@ -21,7 +21,7 @@ const N_SEG: int = 30
 const RAYON_CABLE: float = 0.022           # câble de 11 mm, épaissi pour qu'on le devine
 const PAS_ECH: float = 40.0
 const CASE_ECH: float = 250.0
-const DEMI_LONG: float = 3.2               # demi-longueur hors tout, lame et fraise comprises
+const DEMI_LONG: float = 3.35              # demi-longueur hors tout, lame et fraise comprises
 const DEMI_LARG: float = 2.4
 
 var relief: ReliefBuilder = null
@@ -156,11 +156,249 @@ static func _xf(p: Vector3, rx: float = 0.0, ry: float = 0.0, rz: float = 0.0) -
 	return Transform3D(Basis.from_euler(Vector3(rx, ry, rz)), p)
 
 
+## Lame : largeur du versoir central, de chaque aile (repliée à 32° vers l'avant), abscisse de son dos.
+const LAME_CENTRE: float = 4.0
+const LAME_AILE: float = 0.80
+const LAME_Z: float = -3.05
+
+
+## Lattes du versoir : [centre (z, y), longueur, angle autour de X], sur un arc creux vers l'avant (centre à 0,9 m
+## devant, du couteau à 0,04 m à la rive à 1,17 m).
+static func _versoir() -> Array:
+	var c := Vector2(LAME_Z - 0.9, 0.62)
+	var l: Array = []
+	var n: int = 7
+	for k in range(n):
+		var f0: float = deg_to_rad(lerpf(-40.0, 38.0, float(k) / n))
+		var f1: float = deg_to_rad(lerpf(-40.0, 38.0, float(k + 1) / n))
+		var p0: Vector2 = c + 0.9 * Vector2(cos(f0), sin(f0))
+		var p1: Vector2 = c + 0.9 * Vector2(cos(f1), sin(f1))
+		var d: Vector2 = p1 - p0
+		l.append([(p0 + p1) * 0.5, d.length() + 0.02, atan2(d.x, d.y)])
+	return l
+
+
+## Poutre de section carrée de a à b.
+static func _poutre(st: SurfaceTool, a: Vector3, b: Vector3, e: float) -> void:
+	var d: Vector3 = b - a
+	var y: Vector3 = d.normalized()
+	var x: Vector3 = (Vector3.UP if absf(y.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).cross(y).normalized()
+	var z: Vector3 = x.cross(y)
+	var bm := BoxMesh.new()
+	bm.size = Vector3(e, d.length(), e)
+	st.append_from(bm, 0, Transform3D(Basis(x, y, z), (a + b) * 0.5))
+
+
+## Train de roulement (retour d'utilisateur du 25/11/2026 : « fais des chenilles qui tournent ») : par côté, une
+## bande en boucle autour du barbotin (arrière) et de la poulie (avant), crampons d'acier dessinés par le nuanceur et
+## qui défilent à la vitesse d'avance (le brin du bas reste posé sur la neige) ; barbotin, poulie et quatre paires
+## de galets tournent dans le nuanceur (centre en UV2, rayon en UV.x). Un maillage pour toutes les dameuses : elles
+## roulent toutes à V, en marche avant.
+const CH_X: float = 1.78
+const CH_LARG: float = 1.30
+const CH_R: float = 0.42                   # rayon extérieur de la bande aux extrémités
+const CH_Y: float = 0.45
+const CH_ZAV: float = -1.95
+const CH_ZAR: float = 1.85
+const CH_EP: float = 0.08
+static var _maillage_train: ArrayMesh = null
+
+
+static func _boucle_chenille() -> Array:
+	# [z, y, nz, ny, u] : brin du bas de l'avant vers l'arrière, barbotin, brin du haut, poulie
+	var pts: Array = []
+	var u: float = 0.0
+	var prev := Vector2.INF
+	var seq: Array = []
+	seq.append([CH_ZAV, CH_Y - CH_R, 0.0, -1.0])
+	seq.append([CH_ZAR, CH_Y - CH_R, 0.0, -1.0])
+	for k in range(1, 13):
+		var a: float = -PI * 0.5 + PI * k / 12.0
+		seq.append([CH_ZAR + CH_R * cos(a), CH_Y + CH_R * sin(a), cos(a), sin(a)])
+	seq.append([CH_ZAV, CH_Y + CH_R, 0.0, 1.0])
+	for k in range(1, 13):
+		var a2: float = PI * 0.5 + PI * k / 12.0
+		seq.append([CH_ZAV + CH_R * cos(a2), CH_Y + CH_R * sin(a2), cos(a2), sin(a2)])
+	for q in seq:
+		var p := Vector2(q[0], q[1])
+		if prev != Vector2.INF:
+			u += p.distance_to(prev)
+		prev = p
+		pts.append([q[0], q[1], q[2], q[3], u])
+	return pts
+
+
+static func _mat_train(albedo: Color, chenille: bool) -> ShaderMaterial:
+	var sh := Shader.new()
+	if chenille:
+		sh.code = """shader_type spatial;
+render_mode cull_disabled;
+uniform float vitesse = 3.6;
+void fragment() {
+	// crampons : barrettes d'acier tous les 0,30 m sur la bande de caoutchouc, qui défilent (UV.x : m le long de la boucle)
+	float k = fract((UV.x - TIME * vitesse) / 0.30);
+	float barre = smoothstep(0.0, 0.03, k) * (1.0 - smoothstep(0.42, 0.45, k));
+	float bord = step(0.08, UV.y) * step(UV.y, 0.92);
+	barre *= bord;
+	ALBEDO = mix(vec3(0.035, 0.035, 0.04), vec3(0.42, 0.43, 0.45), barre);
+	ROUGHNESS = mix(0.92, 0.45, barre);
+	METALLIC = 0.7 * barre;
+}
+"""
+	else:
+		sh.code = """shader_type spatial;
+uniform float vitesse = 3.6;
+uniform vec3 couleur : source_color = vec3(0.1);
+uniform float metal = 0.0;
+void vertex() {
+	// roue de rayon UV.x autour de (z, y) = UV2 : roule vers −Z (marche avant)
+	float th = -TIME * vitesse / max(UV.x, 0.05);
+	float c = cos(th);
+	float s = sin(th);
+	vec2 p = vec2(VERTEX.z - UV2.x, VERTEX.y - UV2.y);
+	VERTEX.y = UV2.y + p.y * c - p.x * s;
+	VERTEX.z = UV2.x + p.y * s + p.x * c;
+	vec2 n = vec2(NORMAL.z, NORMAL.y);
+	NORMAL.y = n.y * c - n.x * s;
+	NORMAL.z = n.y * s + n.x * c;
+}
+void fragment() {
+	ALBEDO = couleur;
+	ROUGHNESS = 0.5;
+	METALLIC = metal;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("vitesse", V)
+	if not chenille:
+		m.set_shader_parameter("couleur", albedo)
+		m.set_shader_parameter("metal", 0.6 if albedo.r > 0.3 else 0.1)
+	return m
+
+
+## Une roue (dans la surface `acc`) : ses pièces, centre (z, y) et rayon portés par chaque sommet.
+static func _roue(acc: Dictionary, st: SurfaceTool, zc: float, yc: float, r: float) -> void:
+	st.deindex()
+	var a: Array = st.commit_to_arrays()
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	# (tableaux compactés : copiés à la lecture, réaffectés après ajout)
+	var av: PackedVector3Array = acc["v"]
+	var an: PackedVector3Array = acc["n"]
+	var au: PackedVector2Array = acc["uv"]
+	var au2: PackedVector2Array = acc["uv2"]
+	av.append_array(v)
+	an.append_array(a[Mesh.ARRAY_NORMAL])
+	for i in range(v.size()):
+		au.append(Vector2(r, 0.0))
+		au2.append(Vector2(zc, yc))
+	acc["v"] = av
+	acc["n"] = an
+	acc["uv"] = au
+	acc["uv2"] = au2
+
+
+static func _train() -> ArrayMesh:
+	if _maillage_train != null:
+		return _maillage_train
+	var am := ArrayMesh.new()
+	# bandes : surface extérieure, intérieure et deux flancs, par côté
+	var vb := PackedVector3Array()
+	var nb := PackedVector3Array()
+	var ub := PackedVector2Array()
+	var boucle: Array = _boucle_chenille()
+	for sd in [-1.0, 1.0]:
+		var x0: float = sd * CH_X - CH_LARG * 0.5
+		var x1: float = sd * CH_X + CH_LARG * 0.5
+		for k in range(boucle.size()):
+			var q0: Array = boucle[k]
+			var q1: Array = boucle[(k + 1) % boucle.size()]
+			var u0: float = q0[4]
+			var u1: float = q1[4] if k + 1 < boucle.size() else float(q0[4]) + Vector2(q0[0], q0[1]).distance_to(Vector2(q1[0], q1[1]))
+			for face in [0, 1]:
+				var ep: float = 0.0 if face == 0 else -CH_EP
+				var sg: float = 1.0 if face == 0 else -1.0
+				var a0 := Vector3(x0, q0[1] + q0[3] * ep, q0[0] + q0[2] * ep)
+				var a1 := Vector3(x1, q0[1] + q0[3] * ep, q0[0] + q0[2] * ep)
+				var b0 := Vector3(x0, q1[1] + q1[3] * ep, q1[0] + q1[2] * ep)
+				var b1 := Vector3(x1, q1[1] + q1[3] * ep, q1[0] + q1[2] * ep)
+				var na := Vector3(0.0, q0[3], q0[2]) * sg
+				var nbb := Vector3(0.0, q1[3], q1[2]) * sg
+				vb.append_array([a0, b0, a1, a1, b0, b1])
+				nb.append_array([na, nbb, na, na, nbb, nbb])
+				ub.append_array([Vector2(u0, 0.0), Vector2(u1, 0.0), Vector2(u0, 1.0), Vector2(u0, 1.0), Vector2(u1, 0.0), Vector2(u1, 1.0)])
+			# flancs
+			for xs in [x0, x1]:
+				var nx := Vector3(signf(xs - sd * CH_X), 0.0, 0.0)
+				var o0 := Vector3(xs, q0[1], q0[0])
+				var o1 := Vector3(xs, q1[1], q1[0])
+				var i0 := Vector3(xs, q0[1] - q0[3] * CH_EP, q0[0] - q0[2] * CH_EP)
+				var i1 := Vector3(xs, q1[1] - q1[3] * CH_EP, q1[0] - q1[2] * CH_EP)
+				vb.append_array([o0, o1, i0, i0, o1, i1])
+				nb.append_array([nx, nx, nx, nx, nx, nx])
+				ub.append_array([Vector2(u0, 0.5), Vector2(u1, 0.5), Vector2(u0, 0.5), Vector2(u0, 0.5), Vector2(u1, 0.5), Vector2(u1, 0.5)])
+	var ab: Array = []
+	ab.resize(Mesh.ARRAY_MAX)
+	ab[Mesh.ARRAY_VERTEX] = vb
+	ab[Mesh.ARRAY_NORMAL] = nb
+	ab[Mesh.ARRAY_TEX_UV] = ub
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ab)
+	am.surface_set_material(0, _mat_train(Color.BLACK, true))
+	# roues : caoutchouc (gris très sombre) et jantes (acier)
+	var accs: Array = []
+	for c in range(2):
+		accs.append({"v": PackedVector3Array(), "n": PackedVector3Array(), "uv": PackedVector2Array(), "uv2": PackedVector2Array()})
+	var rr: float = CH_R - CH_EP - 0.01
+	for sd in [-1.0, 1.0]:
+		var xc: float = sd * CH_X
+		var roues: Array = [[CH_ZAR, CH_Y, rr, true], [CH_ZAV, CH_Y, rr, false]]
+		for zg in [-1.06, -0.35, 0.35, 1.06]:
+			roues.append([zg, CH_Y - CH_R + CH_EP + 0.31, 0.30, false])
+		for w in roues:
+			var zc: float = w[0]
+			var yc: float = w[1]
+			var r: float = w[2]
+			var st_c := SurfaceTool.new()
+			st_c.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var st_j := SurfaceTool.new()
+			st_j.begin(Mesh.PRIMITIVE_TRIANGLES)
+			# deux bandages (intérieur, extérieur) sur un moyeu
+			for dx in [-0.32, 0.32]:
+				_cyl(st_c, r, 0.30, _xf(Vector3(xc + dx, yc, zc), 0.0, 0.0, PI * 0.5), 14)
+				_cyl(st_j, r * 0.62, 0.32, _xf(Vector3(xc + dx, yc, zc), 0.0, 0.0, PI * 0.5), 10)
+			_cyl(st_j, r * 0.25, CH_LARG + 0.04, _xf(Vector3(xc, yc, zc), 0.0, 0.0, PI * 0.5), 8)
+			# rayons sur la face extérieure (on les voit tourner), dents du barbotin
+			for kr in range(3):
+				var ang: float = TAU * kr / 3.0
+				_boite(st_j, Vector3(0.05, r * 1.6, 0.07), Transform3D(Basis(Vector3.RIGHT, ang), Vector3(xc + sd * 0.49, yc, zc)))
+			if bool(w[3]):
+				for kd in range(12):
+					var ad: float = TAU * kd / 12.0
+					_boite(st_j, Vector3(0.6, 0.09, 0.07), Transform3D(Basis(Vector3.RIGHT, ad),
+						Vector3(xc, yc + cos(ad) * (r + 0.02), zc + sin(ad) * (r + 0.02))))
+			_roue(accs[0], st_c, zc, yc, r)
+			_roue(accs[1], st_j, zc, yc, r)
+	var couleurs: Array = [Color(0.06, 0.06, 0.07), Color(0.45, 0.46, 0.48)]
+	for c2 in range(2):
+		var ar: Array = []
+		ar.resize(Mesh.ARRAY_MAX)
+		ar[Mesh.ARRAY_VERTEX] = accs[c2]["v"]
+		ar[Mesh.ARRAY_NORMAL] = accs[c2]["n"]
+		ar[Mesh.ARRAY_TEX_UV] = accs[c2]["uv"]
+		ar[Mesh.ARRAY_TEX_UV2] = accs[c2]["uv2"]
+		am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ar)
+		am.surface_set_material(am.get_surface_count() - 1, _mat_train(couleurs[c2], false))
+	_maillage_train = am
+	return am
+
+
 static func modele() -> ArrayMesh:
 	if _maillage != null:
 		return _maillage
 	var mats: Dictionary = {
-		"caisse": _mat_std(Color(0.78, 0.11, 0.07), 0.45, 0.2),
+		"caisse": _mat_std(Color(0.86, 0.15, 0.06), 0.32, 0.25),
+		"lame": _mat_std(Color(0.06, 0.06, 0.07), 0.85, 0.1),
+		"jaune": _mat_std(Color(0.95, 0.72, 0.05), 0.4, 0.15),
 		"bande": _mat_std(Color(0.92, 0.92, 0.90), 0.6),
 		"noir": _mat_std(Color(0.05, 0.05, 0.06), 0.9),
 		"acier": _mat_std(Color(0.42, 0.44, 0.47), 0.4, 0.7),
@@ -172,7 +410,10 @@ static func modele() -> ArrayMesh:
 	var mv: StandardMaterial3D = mats["vitre"]
 	mv.emission_enabled = true
 	mv.emission = Color(1.0, 0.80, 0.52)
-	mv.emission_energy_multiplier = 0.18
+	mv.emission_energy_multiplier = 0.10
+	mv.albedo_color = Color(0.06, 0.08, 0.10)
+	mv.roughness = 0.05
+	mv.metallic = 0.6
 	var mp: StandardMaterial3D = mats["phare"]
 	mp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mp.albedo_color = Color(1.0, 0.98, 0.92)
@@ -195,61 +436,110 @@ void fragment() {
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		sts[k] = st
-	# chenilles et leurs galets d'extrémité
-	for sd in [-1.0, 1.0]:
-		_boite(sts["noir"], Vector3(1.15, 0.78, 3.9), _xf(Vector3(sd * 1.72, 0.52, 0.0)))
-		for zz in [-1.95, 1.95]:
-			_cyl(sts["noir"], 0.40, 1.15, _xf(Vector3(sd * 1.72, 0.50, zz), 0.0, 0.0, PI * 0.5))
-			_cyl(sts["acier"], 0.22, 1.18, _xf(Vector3(sd * 1.72, 0.50, zz), 0.0, 0.0, PI * 0.5), 8)
-		# crampons : barrettes sur le dessus de la chenille
-		for kk in range(9):
-			_boite(sts["acier"], Vector3(1.17, 0.05, 0.08), _xf(Vector3(sd * 1.72, 0.93, -1.8 + kk * 0.45)))
-	# châssis, bande, cabine, capot
-	_boite(sts["caisse"], Vector3(2.4, 0.85, 4.1), _xf(Vector3(0.0, 1.18, 0.0)))
-	_boite(sts["bande"], Vector3(2.42, 0.12, 4.12), _xf(Vector3(0.0, 1.30, 0.0)))
-	_boite(sts["vitre"], Vector3(1.86, 1.10, 1.76), _xf(Vector3(0.0, 2.16, -0.70)))
-	_boite(sts["caisse"], Vector3(2.02, 0.14, 1.94), _xf(Vector3(0.0, 2.78, -0.70)))
-	for px in [-0.95, 0.95]:
-		for pz in [-1.6, 0.2]:
-			_boite(sts["caisse"], Vector3(0.09, 1.12, 0.09), _xf(Vector3(px, 2.16, pz)))
-	_boite(sts["caisse"], Vector3(2.15, 0.78, 1.85), _xf(Vector3(0.0, 1.98, 1.12)))
-	_boite(sts["noir"], Vector3(1.9, 0.42, 0.03), _xf(Vector3(0.0, 1.98, 2.06)))
-	_cyl(sts["noir"], 0.07, 0.9, _xf(Vector3(0.75, 2.75, 0.75)), 8)          # échappement
-	# lame à l'avant (orientable, en trois pans), ses bras
-	_boite(sts["acier"], Vector3(3.4, 1.05, 0.16), _xf(Vector3(0.0, 0.72, -3.0), deg_to_rad(-10.0)))
+	# (chenilles, barbotins, poulies et galets : train de roulement animé, _train())
+	# Silhouette d'une dameuse moderne (demande d'utilisateur du 25/11/2026 : « une dameuse moderne rouge, que ce soit
+	# joli » ; photos libres de Wikimedia Commons, sans marque ni logo) : châssis noir bas entre les chenilles, nez
+	# rouge à calandre noire et phares, poste avancé tout vitré à pare-brise penché vers l'avant, montants noirs, toit
+	# rouge débordant à rampe de phares, capot moteur rouge en gradins derrière, ouïes noires, échappement ; lame noire
+	# à grille ; fraise et finisseur noirs à l'arrière ; tambour de treuil et bras rouge en arc sur le capot.
+	_boite(sts["noir"], Vector3(2.1, 0.55, 4.3), _xf(Vector3(0.0, 0.92, 0.0)))                 # châssis
+	_boite(sts["caisse"], Vector3(2.25, 0.62, 0.95), _xf(Vector3(0.0, 1.38, -1.62)))           # nez
+	_boite(sts["caisse"], Vector3(2.1, 0.20, 0.30), _xf(Vector3(0.0, 1.62, -2.05), deg_to_rad(-25.0)))
+	_boite(sts["noir"], Vector3(1.3, 0.34, 0.04), _xf(Vector3(0.0, 1.30, -2.11)))              # calandre
+	for kg in range(6):
+		_boite(sts["acier"], Vector3(1.2, 0.02, 0.05), _xf(Vector3(0.0, 1.17 + kg * 0.055, -2.13)))
+	_boite(sts["caisse"], Vector3(2.3, 0.55, 3.0), _xf(Vector3(0.0, 1.40, 0.55)))              # caisse basse
+	_boite(sts["noir"], Vector3(2.32, 0.10, 4.15), _xf(Vector3(0.0, 1.10, -0.05)))             # liseré bas
+	# poste : verrière (côtés et arrière), pare-brise penché, montants, toit
+	_boite(sts["vitre"], Vector3(2.0, 1.30, 1.55), _xf(Vector3(0.0, 2.32, -0.55)))
+	_boite(sts["vitre"], Vector3(2.0, 1.42, 0.05), _xf(Vector3(0.0, 2.30, -1.38), deg_to_rad(-14.0)))
+	for px in [-1.02, 1.02]:
+		_boite(sts["noir"], Vector3(0.10, 1.44, 0.10), _xf(Vector3(px, 2.30, -1.38), deg_to_rad(-14.0)))
+		_boite(sts["noir"], Vector3(0.10, 1.32, 0.12), _xf(Vector3(px, 2.32, 0.22)))
+		_boite(sts["noir"], Vector3(0.06, 1.30, 0.08), _xf(Vector3(px, 2.32, -0.55)))        # montant milieu
+		_boite(sts["noir"], Vector3(0.05, 0.36, 0.30), _xf(Vector3(px * 1.12, 2.55, -1.20)))  # rétroviseurs
+	_boite(sts["noir"], Vector3(2.06, 0.12, 1.75), _xf(Vector3(0.0, 1.70, -0.58)))             # bas de verrière
+	_boite(sts["caisse"], Vector3(2.22, 0.16, 2.0), _xf(Vector3(0.0, 3.03, -0.60)))            # toit
+	_boite(sts["caisse"], Vector3(2.10, 0.10, 0.35), _xf(Vector3(0.0, 3.00, -1.70), deg_to_rad(10.0)))  # visière
+	_boite(sts["noir"], Vector3(1.7, 0.12, 0.14), _xf(Vector3(0.0, 3.16, -1.45)))              # rampe de phares
+	# capot moteur en gradins, ouïes, échappement
+	_boite(sts["caisse"], Vector3(2.15, 0.85, 1.75), _xf(Vector3(0.0, 2.08, 1.12)))
+	_boite(sts["caisse"], Vector3(1.85, 0.22, 1.45), _xf(Vector3(0.0, 2.58, 1.20)))
+	_boite(sts["caisse"], Vector3(2.15, 0.30, 0.30), _xf(Vector3(0.0, 1.78, 2.05), deg_to_rad(30.0)))
+	for sdv in [-1.0, 1.0]:
+		for kv in range(5):
+			_boite(sts["noir"], Vector3(0.03, 0.05, 0.9), _xf(Vector3(sdv * 1.08, 1.90 + kv * 0.09, 1.20)))
+	_cyl(sts["noir"], 0.07, 0.75, _xf(Vector3(0.72, 3.0, 0.62)), 8)          # échappement
+	# lame à l'avant (retour d'utilisateur du 25/11/2026 : « le râteau devant est pas bien fait ») : versoir bombé (creux
+	# vers l'avant) en lattes sur un arc, deux ailes repliées vers l'avant, couteau d'acier en bas, rive rouge en haut,
+	# raidisseurs au dos ; cadre de poussée (deux bras) et deux vérins de levage depuis le châssis
+	var lattes: Array = _versoir()
+	for lt in lattes:
+		_boite(sts["lame"], Vector3(LAME_CENTRE, lt[1], 0.06), _xf(Vector3(0.0, lt[0].y, lt[0].x), lt[2]))
 	for sd2 in [-1.0, 1.0]:
-		_boite(sts["acier"], Vector3(0.95, 1.0, 0.15), _xf(Vector3(sd2 * 2.05, 0.72, -2.82), deg_to_rad(-10.0), sd2 * deg_to_rad(-28.0)))
-		_boite(sts["noir"], Vector3(0.16, 0.16, 1.3), _xf(Vector3(sd2 * 0.75, 0.80, -2.3), deg_to_rad(8.0)))
-	_boite(sts["caisse"], Vector3(3.42, 0.10, 0.18), _xf(Vector3(0.0, 1.25, -3.08), deg_to_rad(-10.0)))
+		var charn := Transform3D(Basis(Vector3.UP, sd2 * deg_to_rad(32.0)), Vector3(sd2 * LAME_CENTRE * 0.5, 0.0, LAME_Z))
+		for lt in lattes:
+			var loc := _xf(Vector3(sd2 * LAME_AILE * 0.5, lt[0].y, lt[0].x - LAME_Z), lt[2])
+			_boite(sts["lame"], Vector3(LAME_AILE, lt[1], 0.06), charn * loc)
+		# couteau et rive de l'aile
+		_boite(sts["acier"], Vector3(LAME_AILE, 0.07, 0.10), charn * _xf(Vector3(sd2 * LAME_AILE * 0.5, 0.06, -0.20)))
+		_boite(sts["noir"], Vector3(LAME_AILE, 0.08, 0.16), charn * _xf(Vector3(sd2 * LAME_AILE * 0.5, 1.17, -0.18)))
+		# bras de poussée, du châssis au dos de la lame
+		var a0 := Vector3(sd2 * 0.85, 0.78, -1.75)
+		var a1 := Vector3(sd2 * 1.05, 0.42, LAME_Z + 0.22)
+		_poutre(sts["noir"], a0, a1, 0.16)
+		# vérin de levage : corps noir, tige d'acier
+		var v0 := Vector3(sd2 * 0.55, 1.45, -1.95)
+		var v1 := Vector3(sd2 * 0.70, 0.98, LAME_Z + 0.20)
+		_poutre(sts["noir"], v0, v0.lerp(v1, 0.6), 0.11)
+		_poutre(sts["acier"], v0.lerp(v1, 0.55), v1, 0.06)
+	_boite(sts["acier"], Vector3(LAME_CENTRE, 0.07, 0.10), _xf(Vector3(0.0, 0.06, LAME_Z - 0.20)))
+	_boite(sts["noir"], Vector3(LAME_CENTRE, 0.08, 0.16), _xf(Vector3(0.0, 1.17, LAME_Z - 0.18)))
+	# grille du haut de la lame (photos : moitié haute ajourée) : barreaux verticaux devant le versoir
+	for kb in range(-16, 17):
+		_boite(sts["noir"], Vector3(0.035, 0.50, 0.05), _xf(Vector3(kb * 0.12, 0.92, LAME_Z - 0.17)))
+	_boite(sts["noir"], Vector3(LAME_CENTRE, 0.04, 0.06), _xf(Vector3(0.0, 0.68, LAME_Z - 0.10)))
+	for kx in range(-3, 4):
+		_boite(sts["noir"], Vector3(0.07, 0.70, 0.12), _xf(Vector3(kx * 0.62, 0.55, LAME_Z + 0.08)))
+	_boite(sts["noir"], Vector3(LAME_CENTRE * 0.8, 0.12, 0.12), _xf(Vector3(0.0, 0.55, LAME_Z + 0.16)))
 	# fraise, capot de fraise et peigne (velours côtelé)
-	_cyl(sts["acier"], 0.30, 4.2, _xf(Vector3(0.0, 0.34, 2.75), 0.0, 0.0, PI * 0.5), 10)
-	_boite(sts["caisse"], Vector3(4.3, 0.10, 1.05), _xf(Vector3(0.0, 0.72, 2.75), deg_to_rad(6.0)))
-	_boite(sts["noir"], Vector3(0.12, 0.55, 1.0), _xf(Vector3(-2.12, 0.45, 2.75)))
-	_boite(sts["noir"], Vector3(0.12, 0.55, 1.0), _xf(Vector3(2.12, 0.45, 2.75)))
-	_boite(sts["bande"], Vector3(4.2, 0.03, 0.85), _xf(Vector3(0.0, 0.10, 3.55), deg_to_rad(10.0)))
+	_cyl(sts["noir"], 0.30, 4.2, _xf(Vector3(0.0, 0.34, 2.75), 0.0, 0.0, PI * 0.5), 10)
+	# capot de la fraise jaune, joues jaunes (retour d'utilisateur du 25/11/2026 : « la fraise à l'arrière, normalement
+	# il y a une partie jaune »)
+	_boite(sts["jaune"], Vector3(4.3, 0.10, 1.05), _xf(Vector3(0.0, 0.72, 2.75), deg_to_rad(6.0)))
+	_boite(sts["jaune"], Vector3(4.3, 0.32, 0.08), _xf(Vector3(0.0, 0.58, 3.27), deg_to_rad(-20.0)))
+	_boite(sts["jaune"], Vector3(0.12, 0.55, 1.0), _xf(Vector3(-2.12, 0.45, 2.75)))
+	_boite(sts["jaune"], Vector3(0.12, 0.55, 1.0), _xf(Vector3(2.12, 0.45, 2.75)))
+	_boite(sts["lame"], Vector3(4.2, 0.03, 0.85), _xf(Vector3(0.0, 0.10, 3.55), deg_to_rad(10.0)))
 	_boite(sts["noir"], Vector3(0.6, 0.18, 0.7), _xf(Vector3(0.0, 0.82, 2.2)))           # attelage
 	# phares : rampe sur le toit, feux de châssis, feux arrière
-	_boite(sts["phare"], Vector3(1.6, 0.09, 0.09), _xf(Vector3(0.0, 2.90, -1.55)))
+	_boite(sts["phare"], Vector3(1.5, 0.07, 0.05), _xf(Vector3(0.0, 3.16, -1.53)))
 	for sd3 in [-0.85, 0.85]:
-		_boite(sts["phare"], Vector3(0.32, 0.16, 0.05), _xf(Vector3(sd3, 1.42, -2.06)))
-		_boite(sts["phare"], Vector3(0.22, 0.12, 0.05), _xf(Vector3(sd3 * 1.1, 2.70, 0.22)))
+		_boite(sts["phare"], Vector3(0.36, 0.14, 0.05), _xf(Vector3(sd3, 1.50, -2.12)))
+		_boite(sts["phare"], Vector3(0.22, 0.12, 0.05), _xf(Vector3(sd3 * 1.1, 2.85, 0.32)))
 	# gyrophares
 	for sd4 in [-0.72, 0.72]:
-		_cyl(sts["gyro"], 0.085, 0.17, _xf(Vector3(sd4, 2.94, -0.15)), 10)
+		_cyl(sts["gyro"], 0.085, 0.17, _xf(Vector3(sd4, 3.20, -0.10)), 10)
 	# treuil : tambour et sa platine sur le capot
-	_boite(sts["acier"], Vector3(1.1, 0.18, 0.62), _xf(Vector3(0.0, 2.45, 1.45)))
-	_cyl(sts["acier"], 0.30, 0.95, _xf(Vector3(0.0, 2.72, 1.45), 0.0, 0.0, PI * 0.5), 12)
+	_boite(sts["noir"], Vector3(1.1, 0.18, 0.62), _xf(Vector3(0.0, 2.75, 1.45)))
+	_cyl(sts["noir"], 0.30, 0.95, _xf(Vector3(0.0, 3.0, 1.45), 0.0, 0.0, PI * 0.5), 12)
 	var am := ArrayMesh.new()
 	for k2 in mats:
 		var st2: SurfaceTool = sts[k2]
 		st2.generate_normals()
+		var n0: int = am.get_surface_count()
 		st2.commit(am)
-		am.surface_set_material(am.get_surface_count() - 1, mats[k2])
+		# (matière sans pièce : pas de surface — sa matière allait sur la précédente, la lame peinte en blanc)
+		if am.get_surface_count() > n0:
+			am.surface_set_material(am.get_surface_count() - 1, mats[k2])
 	_maillage = am
 	# flèche du treuil (tourne vers l'ancrage) : bras le long de −Z, extrémité à 1,9 m
 	var stf := SurfaceTool.new()
 	stf.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_boite(stf, Vector3(0.20, 0.20, 1.9), _xf(Vector3(0.0, 0.0, -0.95)))
+	# bras en arc (photos : col de cygne rouge), bout à 1,9 m vers l'ancrage, poulie au bout
+	var arc: Array = [Vector3(0, 0, 0), Vector3(0, 0.65, -0.45), Vector3(0, 0.80, -1.10), Vector3(0, 0.45, -1.70), Vector3(0, 0, -1.9)]
+	for ka in range(arc.size() - 1):
+		_poutre(stf, arc[ka], arc[ka + 1], 0.20)
 	_cyl(stf, 0.12, 0.26, _xf(Vector3(0.0, 0.0, -1.9), 0.0, 0.0, PI * 0.5), 8)
 	stf.generate_normals()
 	_maillage_fleche = stf.commit()
@@ -330,9 +620,15 @@ func _creer(i: int, s: float, sens: float) -> Dictionary:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	mi.layers = 1 | Cabin.LAYER_VOIE           # éclairée par le Soleil ou la Lune du skieur dehors
 	racine.add_child(mi)
+	var tr := MeshInstance3D.new()
+	tr.name = "Train"
+	tr.mesh = _train()
+	tr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	tr.layers = 1 | Cabin.LAYER_VOIE
+	racine.add_child(tr)
 	var piv := Node3D.new()
 	piv.name = "Fleche"
-	piv.position = Vector3(0.0, 2.80, 1.45)
+	piv.position = Vector3(0.0, 3.05, 1.45)
 	racine.add_child(piv)
 	var mf := MeshInstance3D.new()
 	mf.mesh = _maillage_fleche
@@ -637,7 +933,7 @@ func _phares(pc: Vector3) -> void:
 			sp.shadow_enabled = false
 			sp.light_specular = 0.2
 			if ph.is_empty():
-				sp.position = Vector3(0.0, 2.95, -1.6)
+				sp.position = Vector3(0.0, 3.12, -1.6)
 				sp.rotation = Vector3(deg_to_rad(-14.0), 0.0, 0.0)
 			else:
 				# feu de travail arrière, sur la fraise

@@ -128,7 +128,8 @@ func _tick() -> void:
 				_etat = 2
 		7:
 			if _lg._phase == "route":
-				_verif(_nom() + " : le skieur arrêté, départ", _t < 15.0, "%.1f s" % _t)
+				# (Funival : portes closes T_FERMETURE s avant le départ, au rythme de la vidéo — 25/11/2026)
+				_verif(_nom() + " : le skieur arrêté, départ", _t < 15.0 + (Funival.T_FERMETURE if _lg is Funival else 0.0), "%.1f s" % _t)
 				_k += 1
 				_etat = 2
 				Engine.time_scale = 1.0

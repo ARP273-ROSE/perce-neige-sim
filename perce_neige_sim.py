@@ -17168,7 +17168,12 @@ class GameWidget(QWidget):
                 boutons.append((T("CABIN LIGHTS", "ÉCLAIRAGE"), "eclairage", None, bool(d.get("eclairage_on")), COLOR_WARN))
             elif cv == "klaxon":
                 boutons.append((T("HORN", "KLAXON"), "klaxon", None, False, QColor(200, 200, 210)))
-        if pr.groupe_evacuation(g):
+        # ÉVACUER : seulement quand il y a de quoi (panne grave en cours, installation arrêtée) — sinon le bouton ne
+        # faisait rien, à côté de CORDE de la 3D qui, elle, marchait (retour d'utilisateur du 25/11/2026 : « des
+        # boutons en doublon dans le pupitre, ÉVACUER marche pas »)
+        if pr.groupe_evacuation(g) and float(d.get("v") or 0.0) <= 0.0 and any(
+                isinstance(q, dict) and q.get("gravite") == "grave" and q.get("phase") in ("active", "intervention")
+                for q in d.get("pannes") or []):
             boutons.append((T("EVACUATE", "ÉVACUER"), "evacuer", None, False, COLOR_ALARM))
         if d.get("hors_service"):
             boutons.append((T("NEW SERVICE", "REMISE EN SERVICE"), "remise_service", None, False, COLOR_GOOD))

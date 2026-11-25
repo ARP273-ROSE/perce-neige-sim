@@ -53,7 +53,7 @@ uniform vec4 bloc_masque = vec4(0.0, 0.0, 1.0, 1.0);
 uniform float avec_masque = 0.0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
-uniform vec4 volumes[36];           // volumes percés (ReliefBuilder.percer_volume) : 3 lignes affines par volume
+uniform vec4 volumes[48];           // volumes percés (ReliefBuilder.percer_volume) : 3 lignes affines par volume
 uniform int n_volumes = 0;
 varying vec3 pw;
 uniform float hiver = 0.0;          // skieur : neige, relief ombré
@@ -1517,7 +1517,10 @@ func _sur_replat(cle: String, aval: bool) -> bool:
 ## le relief les mettait à 7,8 m d'écart, sur une rampe à 35 % ; palier commun au niveau du quai de Brévières (au niveau des
 ## Boisses, le dernier pylône de Brévières passait en creux : bench_profil_lignes).
 const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iseran", true, 30.0, false]], 2322.9, 5.0, 10.0],
-	[[["tcd8_brevieres", false, 10.0, false], ["tcd10_boisses", true, 10.0, false]], 1755.0, 5.0, 10.0],
+	# (1768 m : le sol du LiDAR HD au départ des Boisses est à 1769 m, comme la fiche ; le palier à 1755 m, pris sur
+	# l'ancien relief, enterrait les deux gares de 14 m et dressait le P2 des Boisses à 48 m — retour d'utilisateur du
+	# 25/11/2026 : « pylône 2 TCD Boisses à 45 m, trop haut »)
+	[[["tcd8_brevieres", false, 10.0, false], ["tcd10_boisses", true, 10.0, false]], 1768.0, 5.0, 25.0],
 	# départs des TSD Marais et Aiguille Rouge, côte à côte (retour d'utilisateur du 19/11/2026 : « le terrassement de
 	# la gare aval de Marais recouvre le départ d'Aiguille Rouge, Marais un peu plus haut ; les deux doivent être
 	# level ») : quais à 2161,96 et 2163,39 m, palier commun à mi-hauteur
@@ -2035,7 +2038,7 @@ var _fosses: Dictionary = {}          # clé → Rect2
 ## Volumes percés : boîtes orientées (transformée du cube [-1, 1]³ dans le monde) où AUCUNE surface du relief n'est
 ## dessinée — tuiles, pièces fines, grille fine, anneaux. Tranchée couverte du portail du Funival : le terrain en
 ## dévers traversait le tube sur 25 m, et la grille fine (non HD) ne voit pas les trous des pièces (18/11/2026).
-const MAX_VOLUMES: int = 12
+const MAX_VOLUMES: int = 16
 var _volumes: Dictionary = {}           # clé → [Transform3D]
 
 

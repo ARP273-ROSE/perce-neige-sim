@@ -19,15 +19,20 @@ var _main: Node = null
 var _f: int = 0
 var _f0: int = 0
 var _fait: bool = false
+var _retouche: bool = false
 
-const HAUTEURS_A_LA_MAIN: Array = ["tsd6_leissieres"]
+const HAUTEURS_A_LA_MAIN: Array = []      # (Leissières y était jusqu'au 25/11/2026 : hauteurs de l'ancien sol)
 const PLAFOND_FIN: float = 4.0
 # relief fin : garde lue sur le vrai sol, tous les 5 m, sous les deux brins (le profil, lui, reste tous les 10 m)
 const PAS_REEL: float = 5.0
 var _poids_garde: float = POIDS_GARDE    # (--poids-garde=N : ligne où aucun véhicule ne touche, les galets d'abord)
-var _poids_reel: float = 0.0            # (--poids-reel=N, (m²) ; 0 : garde sur le profil seul)
+# (garde sous les DEUX brins, sur le vrai sol, par défaut : sous l'axe seul, le brin retour touchait le dévers —
+# retour d'utilisateur du 25/11/2026, Vallon de l'Iseran au P2)
+var _poids_reel: float = 1.0e4          # (--poids-reel=N, (m²) ; 0 : garde sur le profil seul)
 var _sols: Dictionary = {}              # ligne → sol le plus haut sous les brins, tous les PAS_REEL
-const POIDS_DEV: float = 1.0e4          # (rad²) : 0,1 rad de trop → 100
+# (1e4 jusqu'au 25/11/2026 : la garde l'emportait 10 fois sur l'angle, d'où des câbles pliés de 20 à 60° au-delà de
+# leurs galets — angles fantômes en sortie et entrée de gare, Tovière, Tufs, Leissières ; retour d'utilisateur)
+const POIDS_DEV: float = 1.0e5          # (rad²) : 0,1 rad de trop → 1 000
 const POIDS_GARDE: float = 1.0e5        # (m²) : 0,1 m sous la garde → 1 000 (quasi intouchable)
 const POIDS_ECART: float = 0.002        # (m²) : 10 m d'écart au départ → 0,2
 
@@ -57,7 +62,10 @@ func _tick() -> void:
 
 func _calculer() -> void:
 	var sol_fin: bool = _main.relief.fin != null
-	if sol_fin:
+	# --retouche (relief normal) : comme sur le relief fin, part des hauteurs des données et ne les relève que de
+	# PLAFOND_FIN au plus (25/11/2026 : repris de zéro avec le nouveau poids des angles, des pylônes montaient à 36 m)
+	_retouche = "--retouche" in OS.get_cmdline_user_args()
+	if sol_fin or _retouche:
 		LigneRemontee.ignorer_precalcul = false
 	var k_part: int = 0
 	var n_part: int = 1
@@ -124,6 +132,9 @@ func _calculer() -> void:
 	var nom: String = "geometrie.json" if n_part == 1 else "geometrie_%d.json" % (k_part + 1)
 	if not seules.is_empty():
 		nom = "geometrie_x_%s.json" % "_".join(seules)
+	if _retouche and not sol_fin:
+		# (après les geometrie_x_… : la retouche l'emporte ; une ligne refaite à part après elle : geometrie_z_…)
+		nom = "geometrie_y_%d.json" % (k_part + 1) if seules.is_empty() else "geometrie_z_%s.json" % "_".join(seules)
 	if sol_fin:
 		nom = nom.replace("geometrie", "geometrie_fin")
 	var f := FileAccess.open("res://data/remontees/" + nom, FileAccess.WRITE)
@@ -192,7 +203,7 @@ func _manque_reel(lg: LigneRemontee, k: int) -> float:
 func _h_haut(lg: LigneRemontee, i: int, t: float) -> float:
 	var p: Dictionary = lg.pylones[i]
 	var haut: float = t + float(p.get("h_max", 36.0))
-	if _main.relief.fin != null and p.has("h"):
+	if (_main.relief.fin != null or _retouche) and p.has("h"):
 		haut = minf(haut, t + float(p["h"]) + PLAFOND_FIN)
 	return haut
 

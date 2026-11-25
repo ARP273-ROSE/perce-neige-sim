@@ -60,7 +60,7 @@ const NOMS: Array = ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "
 	"tsf_ruisseau",
 	"tsd_forfait", "tsd_gare", "tsd_portillons", "tsd_embarquement", "tsd_pyl_cc", "tsd_pyl_s", "tsd_ligne", "tsd_arret", "tsd_arrete", "tsd_redemarrage", "tsd_arrivee", "tsd_debarquement", "tsd_gare_haut", "boisses_gare", "boisses_lanceur_acc", "boisses_ligne", "boisses_pyl_s", "boisses_lanceur_dec", "file_huees",
 	"tke_gare", "tke_depart", "tke_ligne", "tke_pyl_s", "tke_pyl_c", "tke_arrivee",
-	"tph_quai", "tph_ligne", "tph_croisement", "tph_arrivee"]
+	"tph_quai", "tph_ligne", "tph_croisement", "tph_arrivee", "tph_gare_marche", "tph_gare_ralenti", "tph_gm_ligne"]
 
 
 ## Chargement d'avance, en tâche de fond, dès le démarrage (PC) : à l'entrée en skieur, load() les trouve prêts
@@ -77,7 +77,7 @@ func _ready() -> void:
 		var st: AudioStream = load(DOSSIER + nom + ".wav")
 		if st is AudioStreamWAV and nom in ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine",
 				"ligne_3s", "teleski", "3s_gare", "3s_ligne", "3s_motrice", "tcd_gare", "tcd_ligne", "tkd_gare", "tkd_ligne", "tsf_motrice", "tsf_arrivee", "tsf_ligne", "tsf_ruisseau",
-				"tsd_gare", "tsd_ligne", "tsd_arrete", "tsd_gare_haut", "boisses_gare", "boisses_ligne", "tke_gare", "tke_ligne", "tph_quai", "tph_ligne"]:
+				"tsd_gare", "tsd_ligne", "tsd_arrete", "tsd_gare_haut", "boisses_gare", "boisses_ligne", "tke_gare", "tke_ligne", "tph_quai", "tph_ligne", "tph_gare_marche", "tph_gm_ligne"]:
 			var w: AudioStreamWAV = (st as AudioStreamWAV).duplicate()
 			w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 			w.loop_begin = 0
@@ -287,7 +287,7 @@ func _choisir_gares(sk: Vector3) -> void:
 		if _prises(lg2) == "tsf":
 			son = "tsf_motrice" if bool(cand[k][3]) else "tsf_arrivee"
 		elif _prises(lg2) == "tph":
-			son = "tph_quai"
+			son = "tph_gare_marche"
 		elif _prises(lg2) == "funi":
 			# (gare amont : la salle des machines, prise réelle ; gare aval : poulie de renvoi, sans moteur)
 			son = "gare_fixe" if bool(cand[k][3]) else "funi_machines"
@@ -314,6 +314,21 @@ func _maj_gares(delta: float) -> void:
 					p3.stop()
 			continue
 		var r: float = clampf(lg.regime(), 0.0, 1.0)
+		# téléphériques, vu du quai (retour d'utilisateur du 25/11/2026 : « on entend une décélération en boucle ») : la
+		# marche en boucle à vitesse constante ; au freinage, la prise du ralentissement, sa fin calée sur l'arrêt prévu
+		if _prises(lg) == "tph" and lg is Telepherique:
+			var t_r: float = _tph_reste(lg as Telepherique)
+			if t_r <= TPH_RALENTI and t_r > 0.0:
+				if p3.stream != _sons["tph_gare_ralenti"]:
+					p3.stream = _sons["tph_gare_ralenti"]
+					p3.volume_db = -8.0 + GAIN_AMBIANCE
+					p3.pitch_scale = 1.0
+					p3.play(TPH_RALENTI - t_r)
+				continue
+			if p3.stream == _sons["tph_gare_ralenti"]:
+				if p3.playing:
+					continue          # (la prise finit à l'arrêt)
+				p3.stream = _sons["tph_gare_marche"]
 		var cible: float = -60.0 if r < 0.02 else -8.0 + GAIN_AMBIANCE + 20.0 * log(maxf(r, 0.05)) / log(10.0)
 		if not p3.playing and r > 0.02:
 			p3.volume_db = -60.0
@@ -671,6 +686,24 @@ func _maj_ruisseau(delta: float, lg: LigneRemontee, s: float) -> void:
 		_ruisseau.stop()
 
 
+const TPH_RALENTI: float = 27.0          # s : tph_gare_ralenti, du début du freinage à l'arrêt
+
+
+## Téléphérique : temps restant (s) jusqu'à l'arrêt au quai d'arrivée, s'il roule ; −1 sinon.
+func _tph_reste(tp: Telepherique) -> float:
+	if tp._phase != "route" or absf(tp._v) < 0.3:
+		return -1.0
+	var pr: Dictionary = tp._profil()
+	var v: float = absf(tp._v)
+	var but: float = tp._x_quai(false) if tp._sens > 0.0 else tp._x_quai(true)
+	var reste: float = absf(but - tp._s)
+	var a_f: float = maxf(float(pr["a_frein"]), 0.05)
+	var v_pas: float = maxf(float(pr["v_pas"]), 0.3)
+	var d_pas: float = float(pr["d_pas"])
+	var d_fr: float = maxf(v * v - v_pas * v_pas, 0.0) / (2.0 * a_f)
+	return maxf(reste - d_fr - d_pas, 0.0) / v + maxf(v - v_pas, 0.0) / a_f + d_pas / v_pas
+
+
 ## Téléphérique (va-et-vient) : quai à l'arrêt, ligne en route ; croisement des
 ## deux cabines au milieu ; approche de la gare d'arrivée.
 var _tph_crois: float = -100.0
@@ -680,7 +713,9 @@ var _tph_arr: float = -100.0
 func _a_bord_tph(delta: float, lg: LigneRemontee) -> void:
 	var tp: Telepherique = lg as Telepherique
 	var en_route: bool = tp._phase == "route"
-	_ambiance(delta, lg, "tph_ligne" if en_route else "tph_quai", -2.0)
+	# (Grande Motte : sa propre prise en ligne, sans voix ; à quai, la marche de la machine, éteinte à l'arrêt)
+	var ligne_tph: String = "tph_gm_ligne" if String(lg.name) == "tph_grande_motte" else "tph_ligne"
+	_ambiance(delta, lg, ligne_tph if en_route else "tph_gare_marche", -2.0)
 	if not en_route:
 		return
 	var d1: float = tp._vehicules[0][1]
@@ -697,23 +732,32 @@ func _a_bord_tph(delta: float, lg: LigneRemontee) -> void:
 		_coup(lg, "tph_arrivee")
 
 
-## Funival à bord : ses propres sons, tirés des vidéos de la montée (vue cabine) et de la descente (salle des machines)
-## — retour d'utilisateur du 11/11/2026 : « extraire les sons des différentes étapes et ambiances du Funival des vidéos
-## au lieu de copier Perce-Neige » (tools_sons_reels.py, profils funi et funi_machines) : en ligne sur le viaduc ou
-## dans le tunnel (hauteur et force selon la vitesse réelle), ralentissement à l'approche de la gare amont, passage de
-## l'évitement (prise de 12 s, son milieu au croisement), bips puis fermeture des portes avant le départ ; la salle des
-## machines s'entend autour de la gare amont.
-const SONS_FUNI: Array = [["funi_dehors", "remontees/funi_dehors", true], ["funi_tunnel", "remontees/funi_tunnel", true],
-	["funi_croisement", "remontees/funi_croisement", false], ["funi_buzzer", "remontees/funi_buzzer", false],
-	["funi_portes", "remontees/funi_portes", false], ["funi_ralenti", "remontees/funi_ralenti", false],
-	["funi_machines", "remontees/funi_machines", true]]
-const FUNI_CLIP_CROISEMENT: float = 12.0    # s (funi_croisement.wav)
-const FUNI_CLIP_RALENTI: float = 10.0       # s : la prise du ralentissement finit à l'arrêt en gare
-var _funi_crois: float = -100.0
-var _funi_buzz: float = -100.0
-var _funi_portes: float = -100.0
-var _funi_ferm_vu: int = 0
-var _funi_ral: float = -100.0
+## Funival à bord : ses propres sons, tirés de la vidéo de la montée vue de l'arrière (minutages donnés par un utilisateur,
+## 25/11/2026 ; tools_sons_reels.py, profil funival) : à quai en bas, l'intérieur de la rame ; buzzer, fermeture des
+## portes, buzzer de départ ; démarrage, croisière dehors puis dans le tunnel (et son entrée) ; ralentissement avant
+## l'évitement, croisement, reprise ; ralentissement jusqu'à l'arrêt en gare (sa fin calée sur l'arrêt prévu) ; en gare
+## du haut, compresseurs puis ouverture des portes. Le profil de marche du jeu n'est pas touché : les prises s'y calent.
+## La salle des machines s'entend autour de la gare amont.
+const SONS_FUNI: Array = [["funi_quai_bas", "remontees/funi_quai_bas", true], ["funi_gare_haut", "remontees/funi_gare_haut", true],
+	["funi_dehors", "remontees/funi_dehors", true], ["funi_tunnel", "remontees/funi_tunnel", true],
+	["funi_buzzer", "remontees/funi_buzzer", false], ["funi_portes", "remontees/funi_portes", false],
+	["funi_buzzer_depart", "remontees/funi_buzzer_depart", false], ["funi_depart", "remontees/funi_depart", false],
+	["funi_entree_tunnel", "remontees/funi_entree_tunnel", false], ["funi_ralenti_evit", "remontees/funi_ralenti_evit", false],
+	["funi_croisement", "remontees/funi_croisement", false], ["funi_reprise", "remontees/funi_reprise", false],
+	["funi_ralenti", "remontees/funi_ralenti", false], ["funi_compresseur", "remontees/funi_compresseur", false],
+	["funi_ouverture", "remontees/funi_ouverture", false], ["funi_machines", "remontees/funi_machines", true]]
+const FUNI_RALENTI: float = 103.0        # s : funi_ralenti, du début du freinage (5:39) à l'arrêt (7:22)
+const FUNI_PORTES: float = 14.0          # s : funi_portes, fermeture finie à la fin de la prise
+const FUNI_ENTREE_TUNNEL: float = 6.0    # s : dans funi_entree_tunnel, l'entrée sous la roche
+const FUNI_EVIT_AVANT: float = 31.0      # s avant la rencontre : début du ralentissement (3:29, rencontre vers 4:00)
+const FUNI_CROIS_AVANT: float = 11.0     # s avant la rencontre : début de la prise du croisement (3:49)
+const FUNI_CROIS_DUREE: float = 22.0
+var _funi_phase: String = ""
+var _funi_t_arrivee: float = -100.0
+var _funi_ouv_jouee: bool = false
+var _funi_etapes: Dictionary = {}       # étapes déjà jouées du trajet ou du quai en cours
+var _funi_ral_on: bool = false
+var _funi_t_crois: float = -100.0
 var _funi_ecart: float = INF                  # écart précédent entre les deux véhicules (ils se rapprochent ?)
 
 
@@ -725,39 +769,74 @@ func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 	var i_v: int = int(ab[1]) if ab.size() > 1 else 0
 	var d_v: float = float(tp._vehicules[i_v][1])
 	var dedans: bool = fv != null and fv.dans_tunnel(d_v)
-	_ambiance(delta, lg, "funi_tunnel" if dedans else "funi_dehors", -6.0)
-	# ralentissement : la prise finit quand le véhicule s'arrête au quai d'arrivée
 	var monte: bool = (tp._sens > 0.0) == (i_v == 0)
-	var but: float = tp._x_quai(not monte)
-	if tp._phase != "quai" and v > 0.5 and absf(but - d_v) / maxf(v, 0.5) < FUNI_CLIP_RALENTI * 0.6 and _t - _funi_ral > 60.0:
-		_funi_ral = _t
-		_coup(lg, "funi_ralenti")
+	if tp._phase != _funi_phase:
+		if tp._phase == "quai":
+			_funi_t_arrivee = _t
+			_funi_ouv_jouee = false
+			_coup(lg, "funi_compresseur")
+		elif _funi_phase == "quai" and not tp.portes_manu:
+			_coup(lg, "funi_depart")
+		_funi_phase = tp._phase
+		_funi_etapes.clear()
+		_funi_ral_on = false
+	# (longues prises — départ, ralentissements, croisement — : elles portent tout le son, l'ambiance s'efface)
+	var long: bool = _coup3s.playing and _coup3s.stream != null and _coup3s.stream.get_length() > 9.0
 	if tp._phase == "quai":
-		# portes à la main (exploitation manuelle) : buzzer et portes à chaque fermeture demandée
+		var en_bas: bool = d_v < lg.longueur_h() * 0.5
+		_ambiance(delta, lg, "funi_quai_bas" if en_bas else "funi_gare_haut", -30.0 if long else -6.0)
+		if not _funi_ouv_jouee and _t - _funi_t_arrivee >= Funival.T_OUVERTURE:
+			_funi_ouv_jouee = true
+			_coup(lg, "funi_ouverture")
 		if tp.portes_manu:
-			if tp.fermetures_manu != _funi_ferm_vu:
-				_funi_ferm_vu = tp.fermetures_manu
+			if tp.fermetures_manu != int(_funi_etapes.get("ferm", -1)):
+				_funi_etapes["ferm"] = tp.fermetures_manu
 				_coup(lg, "funi_buzzer")
 				_coup(lg, "funi_portes")
 			return
-		_funi_ferm_vu = tp.fermetures_manu
-		# buzzer 7 s avant le départ (durée du buzzer du Perce-Neige), puis les portes
-		if tp._t_quai < 7.5 and tp._t_quai > 6.5 and _t - _funi_buzz > 20.0:
-			_funi_buzz = _t
-			_coup(lg, "funi_buzzer")
-		if tp._t_quai < 1.2 and _t - _funi_portes > 20.0:
-			_funi_portes = _t
-			_coup(lg, "funi_portes")
+		_funi_etapes["ferm"] = tp.fermetures_manu
+		# buzzer, puis la fermeture finie T_FERMETURE s avant le départ, puis le buzzer de départ (6 s)
+		var t_ferme: float = Funival.T_FERMETURE + FUNI_PORTES
+		_etape_funi(lg, "buzzer", tp._t_quai < t_ferme + 2.0)
+		_etape_funi(lg, "portes", tp._t_quai < t_ferme)
+		_etape_funi(lg, "buzzer_depart", tp._t_quai < 6.0)
 		return
-	# croisement : les deux véhicules se rapprochent à 2 v ; le milieu de la prise au moment où ils se croisent
-	var d1: float = tp._vehicules[0][1]
-	var d2: float = tp._vehicules[1][1]
-	var ecart: float = absf(d1 - d2)
+	_ambiance(delta, lg, "funi_tunnel" if dedans else "funi_dehors", -30.0 if long else -6.0)
+	# entrée du tunnel (en montant) : l'instant d'entrée de la prise sur le portail
+	if fv != null and monte and not dedans and v > 1.0:
+		var t_portail: float = (fv.portail_d - d_v) / v
+		if t_portail > 0.0 and t_portail < FUNI_ENTREE_TUNNEL:
+			_etape_funi(lg, "tunnel", true)
+	# arrivée : la fin de la prise du ralentissement sur l'arrêt prévu
+	var but: float = tp._x_quai(not monte)
+	var reste: float = absf(but - d_v)
+	if not _funi_ral_on and v > 0.5:
+		var lq: float = fv.longueur_quai_nez() if fv != null else 0.0
+		var d_fr: float = minf(maxf(reste - lq, 0.0), v * v / (2.0 * Funival.A_FUNI * Funival.K_COURBE))
+		var t_reste: float = maxf(reste - lq - d_fr, 0.0) / v + 2.0 * d_fr / v + lq / Funival.V_QUAI + 2.0
+		if t_reste <= FUNI_RALENTI:
+			_funi_ral_on = true
+			_coup_a(lg, "funi_ralenti", FUNI_RALENTI - t_reste)
+	# évitement : les deux véhicules se rapprochent à 2 v
+	var ecart: float = absf(float(tp._vehicules[0][1]) - float(tp._vehicules[1][1]))
 	var avant: float = ecart / maxf(2.0 * v, 1.0)
-	if v > 1.0 and ecart < _funi_ecart and avant < FUNI_CLIP_CROISEMENT * 0.5 and _t - _funi_crois > 60.0:
-		_funi_crois = _t
-		_coup(lg, "funi_croisement")
+	if v > 1.0 and ecart < _funi_ecart and not _funi_ral_on:
+		_etape_funi(lg, "evit", avant < FUNI_EVIT_AVANT and avant > FUNI_CROIS_AVANT)
+		if avant < FUNI_CROIS_AVANT and not _funi_etapes.has("crois"):
+			_funi_etapes["crois"] = true
+			_funi_t_crois = _t
+			_coup(lg, "funi_croisement")
+	if _funi_etapes.has("crois") and _t - _funi_t_crois > FUNI_CROIS_DUREE and not _funi_ral_on:
+		_etape_funi(lg, "reprise", true)
 	_funi_ecart = ecart
+
+
+## Une étape du Funival, jouée une fois par trajet ou par quai, dès que sa condition est vraie.
+func _etape_funi(lg: LigneRemontee, etape: String, ok: bool) -> void:
+	if ok and not _funi_etapes.has(etape):
+		_funi_etapes[etape] = true
+		_coup(lg, {"buzzer": "funi_buzzer", "portes": "funi_portes", "buzzer_depart": "funi_buzzer_depart",
+			"tunnel": "funi_entree_tunnel", "evit": "funi_ralenti_evit", "reprise": "funi_reprise"}[etape])
 
 
 ## Boucle d'ambiance à bord, changée en fondu ; abaissée pendant les coups,
@@ -906,6 +985,11 @@ const T_PYL_C_TSF: float = 2.8         # début du train de chocs (spectrogramme
 
 
 func _coup(_lg: LigneRemontee, nom: String, hauteur: float = 1.0) -> void:
+	_coup_a(_lg, nom, 0.0, hauteur)
+
+
+## Prise jouée à partir de `depuis` s (fin calée sur un instant prévu).
+func _coup_a(_lg: LigneRemontee, nom: String, depuis: float, hauteur: float = 1.0) -> void:
 	# deux joueurs : la prise la plus ancienne cède la place
 	var p: AudioStreamPlayer = _coup3s
 	if _coup3s.playing and not _coup3s_b.playing:
@@ -915,7 +999,7 @@ func _coup(_lg: LigneRemontee, nom: String, hauteur: float = 1.0) -> void:
 	p.stream = _sons[nom]
 	p.volume_db = 0.0
 	p.pitch_scale = hauteur
-	p.play()
+	p.play(clampf(depuis, 0.0, maxf(p.stream.get_length() - 0.1, 0.0)))
 
 
 ## Indice dans lg.pylones du pylône à l'abscisse d (m), −1 sinon.

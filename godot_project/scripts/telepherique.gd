@@ -291,7 +291,8 @@ func depart_quai() -> String:
 
 ## Cabine i arrivée à quai, portes ouvertes : [gare aval ?] ou [].
 func arrivee_cabine(i: int) -> Array:
-	if _phase != "quai" or (T_QUAI - _t_quai < 2.0 if not portes_manu else _porte_anim < 0.9):
+	# (portes ouvertes : le Funival les ouvre 3 s après l'arrêt, après ses compresseurs)
+	if _phase != "quai" or ouverture_portes() < 0.9:
 		return []
 	var zn: String = zone_vehicule(i)
 	if zn == "ligne":

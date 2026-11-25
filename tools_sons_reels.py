@@ -90,6 +90,22 @@ de leur auteur) :
   funi_tunnel      2:46–2:58   en ligne dans le tunnel, à pleine vitesse (boucle)
   funi_croisement  2:38–2:50   passage de l'évitement
   funi_ralenti     4:40–4:50   ralentissement à l'approche de la gare amont
+funival — le Funival, vidéo de la montée vue de l'arrière (minutages d'un utilisateur, 25/11/2026) :
+  funi_quai_bas      0:35–0:40   intérieur de la rame à quai en gare aval         (boucle)
+  funi_buzzer        0:56–0:58   buzzer de fermeture des portes
+  funi_portes        0:58–1:12   fermeture des portes (claquements désynchronisés)
+  funi_buzzer_depart 1:19–1:25   buzzer de départ
+  funi_depart        1:25–2:00   démarrage et accélération sur le viaduc
+  funi_dehors        2:05–2:25   croisière dehors                                (boucle)
+  funi_entree_tunnel 2:43–2:55   approche et entrée du tunnel (2:49)
+  funi_tunnel        4:14–4:34   croisière dans le tunnel                        (boucle)
+  funi_ralenti_evit  3:29–3:49   ralentissement avant l'évitement
+  funi_croisement    3:49–4:11   croisement
+  funi_reprise       4:11–4:22   réaccélération après l'évitement
+  funi_ralenti       5:39–7:22   ralentissement, entrée en gare (6:45), arrêt (7:22)
+  funi_gare_haut     7:08–7:15   en gare amont                                   (boucle)
+  funi_compresseur   7:24–7:27   compresseurs des portes
+  funi_ouverture     7:27–7:34,5 ouverture des portes, petit buzzer
 funi_machines — la salle des machines de Bellevarde (vidéo de la descente, piste prise en salle des machines) :
   funi_machines    1:10–1:40   treuil à pleine vitesse                    (boucle)
   funi_machines_dem 0:28–0:45  démarrage du treuil
@@ -182,6 +198,34 @@ PROFILS = {
         ("funi_tunnel", 166.0, 178.0, True),
         ("funi_croisement", 158.0, 170.0, False),
         ("funi_ralenti", 280.0, 290.0, False),
+    ],
+    # (vidéo de la montée vue de l'arrière, minutages donnés par un utilisateur le 25/11/2026 ; remplace « funi »)
+    "funival": [
+        ("funi_quai_bas", 35.0, 40.0, True),
+        ("funi_buzzer", 56.0, 58.0, False),
+        ("funi_portes", 58.0, 72.0, False),
+        ("funi_buzzer_depart", 79.0, 85.0, False),
+        ("funi_depart", 85.0, 120.0, False),
+        ("funi_dehors", 125.0, 145.0, True),
+        ("funi_entree_tunnel", 163.0, 175.0, False),
+        ("funi_tunnel", 254.0, 274.0, True),
+        ("funi_ralenti_evit", 209.0, 229.0, False),
+        ("funi_croisement", 229.0, 251.0, False),
+        ("funi_reprise", 251.0, 262.0, False),
+        ("funi_ralenti", 339.0, 442.0, False),
+        ("funi_gare_haut", 428.0, 435.0, True),
+        ("funi_compresseur", 444.0, 447.0, False),
+        ("funi_ouverture", 447.0, 454.5, False),
+    ],
+    # TPH du Fornet, vue du quai (25/11/2026, consigne d'un utilisateur) : 0:00–0:27 = ralentissement entendu du quai ;
+    # le début, à vitesse constante, sert de boucle de marche
+    "tph_fornet_gare": [
+        ("tph_gare_marche", 0.0, 2.5, True),
+        ("tph_gare_ralenti", 0.0, 27.0, False),
+    ],
+    # TPH de la Grande Motte, à bord : en ligne, un passage sans voix (2:31–2:42, mesuré sur la bande vocale)
+    "tph_gm": [
+        ("tph_gm_ligne", 151.0, 162.0, True),
     ],
     "funi_machines": [
         ("funi_machines", 70.0, 100.0, True),

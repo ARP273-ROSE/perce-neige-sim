@@ -4,6 +4,9 @@
   python tools_relief_fin.py source  DOSSIER   altitude IGN (RGE ALTI) sur l'emprise du jeu, calée sur
                                                la grille de la source, sans rééchantillonnage serveur
   python tools_relief_fin.py ecart   DOSSIER   écrit godot_project/data/relief_fin/domaine.bin
+  python tools_relief_fin.py lidar   DOSSIER_HD  reprend domaine.bin sur le LiDAR HD (tuiles mnt/ de
+                                               tools_relief_hd.py, au mètre) : moyenne 5 × 5 m autour de
+                                               chaque nœud ; le RGE ALTI reste là où le relevé manque
   python tools_relief_fin.py hauteurs DOSSIER [DOSSIER…]
         réunit les sorties geometrie_fin_*.json du précalcul (precalcul_geometrie.gd --relief-fin)
         et les hauteurs posées à la main, dans godot_project/data/remontees/geometrie_fin.json
@@ -36,7 +39,9 @@ P = 360.0 / 2 ** 23
 LEISSIERES = [7.2, 11, 8, 6.5, 9, 15, 12, 7, 6.6, 9.2, 14.2, 20, 16, 7]
 # Borsat : l'outil laissait P21 à sa borne de 12 m et 11,5° de trop aux galets, quel que soit le poids
 # de la garde (aucun véhicule n'y touche, 2 m de marge) : P21 et P22 reprennent leurs hauteurs à 25 m.
-REGLAGES = {'tsd4_borsat_express': {20: 11.33, 21: 11.75}}
+REGLAGES = {}
+# (25/11/2026 : Leissières et Borsat repassent par le précalcul — sur le sol du LiDAR, ces hauteurs posées sur l'ancien
+# sol pliaient le câble de 68° au P7 des Leissières et de 34° au P22 de Borsat)
 
 
 def source(dossier):
@@ -130,6 +135,75 @@ def ecart(dossier):
     print('nœuds %d × %d, fichier %.2f Mo' % (n, m, len(z_) / 1e6))
 
 
+def lidar(dossier):
+    """Sol à 5 m tiré du LiDAR HD (retour d'utilisateur du 24/11/2026 : le glacier a fondu de 5 à 30 m entre le
+    RGE ALTI et le relevé ; lignes et pylônes doivent être posés sur le sol du décor HD). Nœud à 5 m = nœud à 1 m
+    d'indice × 5 (K = 5 contre 25, même alignement) ; moyenne des 5 × 5 nœuds au mètre autour de lui."""
+    import zlib
+    import numpy as np
+    from PIL import Image
+    from scipy import ndimage
+    Image.MAX_IMAGE_PIXELS = None
+    KH, T = 25, 2000
+    r = KH // K
+    sortie = os.path.join(PROJET, 'data', 'relief_fin', 'domaine.bin')
+    n, m = (NZ - 1) * K + 1, (NX - 1) * K + 1
+    ni, nj = (NZ - 1) * KH + 1, (NX - 1) * KH + 1
+    # (toujours depuis le RGE ALTI : DOSSIER_HD/domaine_rgealti.bin, hors du dépôt, écrit au premier passage)
+    base = os.path.join(dossier, 'domaine_rgealti.bin')
+    if not os.path.exists(base):
+        os.replace(sortie, base)
+    with open(base, 'rb') as f:
+        ancien = np.frombuffer(zlib.decompress(f.read()), '<f2').astype('f4').reshape(n, m)
+    png = np.array(Image.open(os.path.join(PROJET, 'textures', 'relief_hauteurs.png')).convert('RGB')).astype('f4')
+    h0 = 1300.0 + (png[..., 0] * 256 + png[..., 1]) * 0.1
+    fz, fx = np.arange(n) / K, np.arange(m) / K
+    i = np.minimum(fz.astype(int), NZ - 2)
+    j = np.minimum(fx.astype(int), NX - 2)
+    v = (fz - i)[:, None].astype('f4')
+    u = (fx - j)[None, :].astype('f4')
+    a, b, c, d = h0[np.ix_(i, j)], h0[np.ix_(i, j + 1)], h0[np.ix_(i + 1, j)], h0[np.ix_(i + 1, j + 1)]
+    tri = np.where(u + v <= 1.0, a + (b - a) * u + (c - a) * v, d + (c - d) * (1 - u) + (b - d) * (1 - v))
+    hd = np.zeros((n, m), 'f4')
+    ok = np.zeros((n, m), bool)
+    for ti in range(0, ni, T):
+        for tj in range(0, nj, T):
+            h, w = min(T, ni - ti), min(T, nj - tj)
+            t = np.fromfile(os.path.join(dossier, 'mnt', '%05d_%05d.bin' % (ti, tj)), '<f4').reshape(h, w)
+            # (l'interpolation en Lambert laisse des valeurs mêlées sur 2 nœuds autour du vide)
+            bon = ndimage.binary_erosion(t > 1400.0, iterations=3, border_value=1)
+            moy = ndimage.uniform_filter(np.where(bon, t, 0.0).astype('f4'), size=r, mode='nearest')
+            cpt = ndimage.uniform_filter(bon.astype('f4'), size=r, mode='nearest')
+            i0, j0 = -(-ti // r), -(-tj // r)
+            i1, j1 = (ti + h - 1) // r, (tj + w - 1) // r
+            si = slice(i0 * r - ti, i1 * r - ti + 1, r)
+            sj = slice(j0 * r - tj, j1 * r - tj + 1, r)
+            cc = cpt[si, sj]
+            hd[i0:i1 + 1, j0:j1 + 1] = moy[si, sj] / np.maximum(cc, 1e-6)
+            ok[i0:i1 + 1, j0:j1 + 1] = (cc > 0.999) & bon[si, sj]
+    e = np.where(ok, hd - tri, ancien).astype('f4')
+    # (bord du domaine : fondu vers la grille à 25 m, comme ecart ; autour des trous du relevé : vers l'ancien écart)
+    libre = np.ones((n, m), bool)
+    libre[0, :] = libre[-1, :] = False
+    libre[:, 0] = libre[:, -1] = False
+    DX, DZ = (X1 - X0) / (NX - 1), (Z1 - Z0) / (NZ - 1)
+    tb = np.clip(ndimage.distance_transform_edt(libre, sampling=(DZ / K, DX / K)) / FONDU, 0, 1)
+    tt = np.clip(ndimage.distance_transform_edt(ok, sampling=(DZ / K, DX / K)) / 30.0, 0, 1)
+    tt = tt * tt * (3 - 2 * tt)
+    e = ancien + (e - ancien) * tt
+    e *= np.minimum(tb * tb * (3 - 2 * tb), 1.0)
+    e = np.where(libre, e, 0.0)
+    diff = (e - ancien)[ok]
+    print('nœuds repris %d / %d ; écart au RGE ALTI : moyen %.2f m, |écart| > 5 m : %d nœuds, extrêmes %.1f / %.1f m'
+          % (ok.sum(), n * m, float(diff.mean()), int((np.abs(diff) > 5).sum()), float(diff.min()), float(diff.max())))
+    q = (np.round(e * 20) / 20).astype('<f2')
+    z_ = zlib.compress(q.tobytes(), 9)
+    with open(sortie + '.tmp', 'wb') as f:
+        f.write(z_)
+    os.replace(sortie + '.tmp', sortie)
+    print('nœuds %d × %d, fichier %.2f Mo' % (n, m, len(z_) / 1e6))
+
+
 def hauteurs(dossiers):
     """Les sorties sont lues dans l'ordre : la dernière gagne (lignes relancées à part)."""
     d = {}
@@ -137,7 +211,6 @@ def hauteurs(dossiers):
         for f in sorted(glob.glob(os.path.join(dos, 'geometrie_fin_*.json'))):
             with open(f, encoding='utf8') as h:
                 d.update(json.load(h))
-    d['tsd6_leissieres'] = [{'h': h, 'k': k} for k, h in enumerate(LEISSIERES)]
     for cle, regl in REGLAGES.items():
         for e in d[cle]:
             if e.get('k') in regl:
@@ -156,6 +229,8 @@ if __name__ == '__main__':
         source(sys.argv[2])
     elif sys.argv[1] == 'ecart':
         ecart(sys.argv[2])
+    elif sys.argv[1] == 'lidar':
+        lidar(sys.argv[2])
     elif sys.argv[1] == 'hauteurs':
         hauteurs(sys.argv[2:])
     else:
