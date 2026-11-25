@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Prochaine version (non publiée)
+## 1.78.0 — 25 novembre 2026
 
 - **Boutons du PC harmonisés** (retour d'utilisateur du 24/11/2026 : « rajoute entre parenthèses le raccourci, mais
   que sur la version PC ; un bouton pour quitter le plein écran ; boutons en haut à gauche et en bas à droite pas du
