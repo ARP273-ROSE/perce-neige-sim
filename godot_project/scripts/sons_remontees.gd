@@ -161,7 +161,7 @@ static var couverture: float = 0.0       # 0 : rien des remontées ; 1 : à bord
 
 func _maj_couverture(delta: float, sk: Vector3) -> void:
 	var c: float = 0.0
-	if not domaine.a_bord.is_empty():
+	if not _a_bord_ou_funival().is_empty():
 		c = 1.0
 	else:
 		for e in _gares:
@@ -384,7 +384,7 @@ func _son_ligne(lg: LigneRemontee) -> String:
 
 
 func _a_bord(delta: float) -> void:
-	var ab: Array = domaine.a_bord
+	var ab: Array = _a_bord_ou_funival()
 	# téléski : départ à la prise de la perche, lâcher (et retour de la perche) à la fin
 	var tk_ici: LigneRemontee = null
 	if not ab.is_empty() and is_instance_valid(ab[0]) and (ab[0] as LigneRemontee).teleski():
@@ -732,6 +732,20 @@ func _a_bord_tph(delta: float, lg: LigneRemontee) -> void:
 		_coup(lg, "tph_arrivee")
 
 
+## Véhicule où est le skieur : assis (domaine.a_bord) ou debout dans un véhicule du Funival (retour d'utilisateur du
+## 25/11/2026 : « aucun son du Funival » — a_bord ne vaut que pour les sièges et cabines, on n'est jamais assis au
+## Funival, ses sons ne se jouaient pas).
+func _a_bord_ou_funival() -> Array:
+	if not domaine.a_bord.is_empty():
+		return domaine.a_bord
+	var fu: Funival = Funival.actif if Funival.actif != null and is_instance_valid(Funival.actif) else null
+	if fu != null and domaine.skieur != null:
+		var k: int = fu.vehicule_contenant(domaine.skieur.global_position)
+		if k >= 0:
+			return [fu, k]
+	return []
+
+
 ## Funival à bord : ses propres sons, tirés de la vidéo de la montée vue de l'arrière (minutages donnés par un utilisateur,
 ## 25/11/2026 ; tools_sons_reels.py, profil funival) : à quai en bas, l'intérieur de la rame ; buzzer, fermeture des
 ## portes, buzzer de départ ; démarrage, croisière dehors puis dans le tunnel (et son entrée) ; ralentissement avant
@@ -765,7 +779,7 @@ func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 	var tp: Telepherique = lg as Telepherique
 	var v: float = absf(tp._v)
 	var fv: Funival = lg as Funival
-	var ab: Array = domaine.a_bord
+	var ab: Array = _a_bord_ou_funival()
 	var i_v: int = int(ab[1]) if ab.size() > 1 else 0
 	var d_v: float = float(tp._vehicules[i_v][1])
 	var dedans: bool = fv != null and fv.dans_tunnel(d_v)

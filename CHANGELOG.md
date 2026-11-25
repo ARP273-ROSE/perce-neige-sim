@@ -5,6 +5,17 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version (non publiée)
+
+- **Funival : sons à bord** (retour d'utilisateur du 25/11/2026 : « aucun son du Funival ») : ils ne jouaient que pour
+  un skieur assis (télésièges, cabines) ; debout dans la rame, jamais. Ils suivent maintenant le véhicule où l'on est.
+- **Skieur en gare** (« quand on commence à avancer, il part à la vitesse de la lumière puis ralentit ») : au départ,
+  le sol est relu sous les pieds ; il gardait celui d'avant (dehors : 16 km/h) jusqu'au premier contact du quai.
+- **Marcher dans les grandes cabines** (« on ne peut pas se déplacer à l'intérieur du 3S ni des téléphériques ») :
+  téléphériques et 3S, on marche dans la caisse (au 3S, on se lève de la banquette), borné aux parois.
+- **Tovière, arrivée** (« la barre horizontale du pylône est trop basse et ne porte rien ») : le P14 relevé à 28 m, le
+  câble n'y fait plus de creux et repose sur ses galets.
+
 ## 1.78.0 — 25 novembre 2026
 
 - **Boutons du PC harmonisés** (retour d'utilisateur du 24/11/2026 : « rajoute entre parenthèses le raccourci, mais

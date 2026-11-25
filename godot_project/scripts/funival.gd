@@ -2650,6 +2650,17 @@ func klaxonner() -> void:
 	_klaxon.play()
 
 
+## Indice du véhicule qui contient le point p (monde), −1 sinon.
+func vehicule_contenant(p: Vector3) -> int:
+	if not pret:
+		return -1
+	for k in range(_vehicules.size()):
+		var loc: Vector3 = (_vehicules[k][0] as Node3D).global_transform.affine_inverse() * p
+		if absf(loc.x) < VehiculeFunival.DEMI_LARGEUR + 0.1 and absf(loc.z) < VehiculeFunival.DEMI_L and loc.y > 0.0 and loc.y < VehiculeFunival.H_TOIT:
+			return k
+	return -1
+
+
 func skieur_dedans(p: Vector3) -> bool:
 	if not pret:
 		return false

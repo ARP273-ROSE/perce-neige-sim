@@ -59,6 +59,9 @@ var assis: bool = false
 ## À bord d'une remontée (siège ou cabine) : posé chaque image par
 ## RemonteesDomaine, il ne marche ni ne glisse (retour d'utilisateur, 22/10/2026)
 var embarque: bool = false
+## Grande cabine où l'on marche (posé par RemonteesDomaine) ; pas voulu à bord (monde, m/s relatif), lu par lui.
+var marche_a_bord: bool = false
+var pas_a_bord: Vector3 = Vector3.ZERO
 const Y_YEUX_ASSIS: float = 1.25          # yeux du passager assis, au-dessus des pieds
 const COUPE_1RE_PERSONNE: float = 0.80    # 1re personne, debout : rien au-dessus des hanches (ni buste ni tête)
 const RECUL_ASSIS: float = 0.42          # pieds devant le banc, bassin au-dessus de l'assise
@@ -808,6 +811,19 @@ func _process_corps(delta: float) -> void:
 		_camera()
 		return
 	if embarque:
+		# grande cabine (téléphériques, 3S) : on y marche (retour d'utilisateur du 25/11/2026 : « on ne peut pas se
+		# déplacer à l'intérieur du 3S ni des téléphériques une fois embarqué ») ; RemonteesDomaine applique le pas
+		pas_a_bord = Vector3.ZERO
+		if marche_a_bord:
+			var cmd_b: Vector2 = entree
+			var k_b: Vector2 = _clavier()
+			if k_b.length() > 0.0:
+				cmd_b = k_b
+			if absf(cmd_b.x) > 0.08:
+				cam_yaw -= cmd_b.x * OMEGA_MARCHE * delta
+			pas_a_bord = _direction(cmd_b)
+			if pas_a_bord.length() > 0.05 and assis:
+				lever()
 		velocity = Vector3.ZERO
 		_camera()
 		return
@@ -1021,12 +1037,35 @@ func _ouvrage_devant(dir: Vector3) -> bool:
 
 
 func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
+	# (au départ, le sol est relu sous les pieds : arrêté, aucun contact ne le met à jour, et sol_terrain restait celui
+	# d'avant — dans une gare on partait à 16 km/h, puis le premier contact du quai ramenait à 3,3 ; retour
+	# d'utilisateur du 25/11/2026 : « en gare, quand on commence à avancer, il part à la vitesse de la lumière puis
+	# ralentit »)
+	if Vector2(velocity.x, velocity.z).length() < 1.0 and dir.length() > 0.05:
+		_sonder_sol()
 	approche_bati = vite and sol_terrain and support == null and _ouvrage_devant(dir)
 	var n: int = clampi(ceili((V_COURSE if vite else V_MARCHE) * delta / 0.03), 1, 4)
 	_frac_pas = 1.0 / n
 	for _k in range(n):
 		_marcher_pas(delta / n, dir, vite)
 	_frac_pas = 1.0
+
+
+## Sol juste sous les pieds, par un rayon : relief ou ouvrage (même règle que _lire_sol).
+func _sonder_sol() -> void:
+	var o: Vector3 = global_position + Vector3.UP * 0.3
+	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(o, o + Vector3.DOWN * 1.5, collision_mask, [get_rid()])
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
+	if hit.is_empty():
+		return
+	var co: CollisionObject3D = hit["collider"] as CollisionObject3D
+	if co == null:
+		return
+	if co.name == "SolAuMetre":
+		sol_terrain = true
+		return
+	var own: Object = co.shape_owner_get_owner(co.shape_find_owner(int(hit["shape"])))
+	sol_terrain = own != null and (own as Node).has_meta("relief")
 
 
 ## Sol sous les pieds : le relief (dehors) ou un ouvrage (gare, escalier, quai…) ; gardé tant qu'on ne touche rien.

@@ -1685,6 +1685,7 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 			skieur.basculer_ski()
 		v.porte_skis(skis)
 		a_bord = [lg, i, k, zn == "gare_aval", avant]
+		_bord_cle = ""                     # (à sa place, pas au bout de la cabine du trajet d'avant)
 		skieur.support = null
 		skieur.embarque = true
 		if not lg.vaetvient():
@@ -2253,6 +2254,11 @@ func lacher_perche() -> void:
 		_lacher_perche(true)
 
 
+## Pas fait à bord d'une grande cabine, depuis la place (repère du véhicule), et le véhicule où il vaut.
+var _bord_off: Vector3 = Vector3.ZERO
+var _bord_cle: String = ""
+
+
 func _suivre_siege() -> void:
 	if not _corde.is_empty():
 		_descendre_corde(get_process_delta_time())
@@ -2280,9 +2286,33 @@ func _suivre_siege() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)
-	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
-	skieur.velocity = Vector3.ZERO
+	var p0: Vector3 = v.place_assise(a_bord[2], a_bord[4])
 	var cap: float = _cap(v, a_bord[4])
+	# grandes cabines (téléphériques, 3S) : on y marche, dans la caisse (retour d'utilisateur du 25/11/2026)
+	var grande: bool = lg.vaetvient() or lg.tricable()
+	skieur.marche_a_bord = grande
+	if grande:
+		var cle: String = "%d:%d" % [lg.get_instance_id(), i]
+		if cle != _bord_cle:
+			_bord_cle = cle
+			_bord_off = Vector3.ZERO
+		var pas: Vector3 = skieur.pas_a_bord
+		if pas.length() > 0.05:
+			var ex: Vector3 = v.vers_monde(p0 + Vector3.RIGHT) - v.vers_monde(p0)
+			var ez: Vector3 = v.vers_monde(p0 + Vector3.BACK) - v.vers_monde(p0)
+			var dt: float = get_process_delta_time()
+			_bord_off += Vector3(pas.dot(ex), 0.0, pas.dot(ez)) * SkieurJoueur.V_MARCHE * dt
+			if lg.tricable():
+				_bord_off.y = -0.035            # debout sur le plancher, plus sur la banquette
+		if _bord_off != Vector3.ZERO:
+			var bx: Vector2 = Vector2(1.25, 2.50) if lg.vaetvient() else Vector2(1.20, 0.38)
+			var pq: Vector3 = p0 + _bord_off
+			pq.x = clampf(pq.x, -bx.x, bx.x)
+			pq.z = clampf(pq.z, -bx.y, bx.y)
+			_bord_off = pq - p0
+			cap = skieur.cam_yaw
+	skieur.global_position = v.vers_monde(p0 + (_bord_off if grande else Vector3.ZERO))
+	skieur.velocity = Vector3.ZERO
 	# il balance avec le siège ou la cabine (assis bien droit, sa tête entrait dans la vitre)
 	var penche: Basis = v.balancement_monde()
 	skieur._visuel.basis = penche * Basis(Vector3.UP, cap)
