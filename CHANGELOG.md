@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Prochaine version
+## 1.79.0 — 26 novembre 2026
 
 - **Trou après le P2 des Boisses (PWA)** (retour d'utilisateur, iPad du 26/11/2026) : la fenêtre de relief fin autour
   du point de vue (PWA, maille à 50 m) refait le sol à 25 m ; le bord des pièces fines des gares, posé sur l'ancien sol,
