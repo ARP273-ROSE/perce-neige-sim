@@ -221,6 +221,20 @@ func _portique_tkd(g: Node3D, zc: float) -> void:
 	RemonteeKit.poutre(g, Vector3(xl, _y_passerelle(pc.z) - 0.08, pc.z), Vector3(xl, pc.y + 0.06, pc.z), 0.10, 0.10, m)
 	RemonteeKit.barre(g, Vector3(xl, _y_passerelle(pc.z - 0.9) - 0.08, pc.z - 0.9), Vector3(xl, pc.y, pc.z), 0.022, m, 5)
 	RemonteeKit.barre(g, Vector3(xl, _y_passerelle(pc.z + 0.9) - 0.08, pc.z + 0.9), Vector3(xl, pc.y, pc.z), 0.022, m, 5)
+	# --- poulie de compression du brin montée au nez (retour d'utilisateur du 26/11/2026 : « il manque une poulie
+	# verticale au départ du TKD, sinon l'angle du câble est fantôme ») : le brin descend de la roue le long du
+	# magasin (PENTE_TKD) puis remonte vers le premier pylône — le creux est tenu par-dessus. Potence au sol côté
+	# extérieur, axe en porte-à-faux : la pince passe côté intérieur.
+	var Rv: float = 0.30
+	var pv: Vector3 = Vector3(xm, lg.y_cable(0.0) - g.position.y + Rv + 0.02, 0.0)
+	_poulie_verticale(g, pv, Rv)
+	var xa: float = xm + sm * 0.55
+	var ya: float = pv.y + Rv + 0.35
+	RemonteeKit.cylindre(g, 0.04, 0.04, absf(xa - xm), Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3((xa + xm) * 0.5, pv.y, 0.0)), "acier", 8)
+	RemonteeKit.poutre(g, Vector3(xa, _gy(g, xa, 0.0) - 0.2, 0.0), Vector3(xa, ya, 0.0), 0.14, 0.14, m)
+	RemonteeKit.poutre(g, Vector3(xa, ya, 0.0), Vector3(xm + sm * 0.12, ya, 0.0), 0.10, 0.10, m)
+	RemonteeKit.barre(g, Vector3(xa, pv.y - 0.9, 0.0), Vector3(xa, pv.y, 0.0), 0.02, m, 5)
+	RemonteeKit.boite_en(g, Vector3(0.03, 0.30, 0.30), Vector3(xm + sm * 0.12, pv.y, 0.0), m)
 	# panneau de la ligne sur le portique avant, face au départ
 	var lab: MeshInstance3D = RemonteeKit.texte_fige(g, lg.nom_court().to_upper(), 64, 0.004, Color(0.08, 0.20, 0.55))
 	var xs: float = cx - sm * xp

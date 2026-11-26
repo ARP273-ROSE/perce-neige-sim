@@ -761,7 +761,7 @@ const SONS_FUNI: Array = [["funi_quai_bas", "remontees/funi_quai_bas", true], ["
 	["funi_ralenti", "remontees/funi_ralenti", false], ["funi_compresseur", "remontees/funi_compresseur", false],
 	["funi_ouverture", "remontees/funi_ouverture", false], ["funi_machines", "remontees/funi_machines", true]]
 const FUNI_RALENTI: float = 103.0        # s : funi_ralenti, du début du freinage (5:39) à l'arrêt (7:22)
-const FUNI_PORTES: float = 14.0          # s : funi_portes, fermeture finie à la fin de la prise
+const FUNI_BUZZER_DEPART: float = 6.0    # s : funi_buzzer_depart, fini à l'instant du départ
 const FUNI_ENTREE_TUNNEL: float = 6.0    # s : dans funi_entree_tunnel, l'entrée sous la roche
 const FUNI_EVIT_AVANT: float = 31.0      # s avant la rencontre : début du ralentissement (3:29, rencontre vers 4:00)
 const FUNI_CROIS_AVANT: float = 11.0     # s avant la rencontre : début de la prise du croisement (3:49)
@@ -794,11 +794,11 @@ func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 		_funi_phase = tp._phase
 		_funi_etapes.clear()
 		_funi_ral_on = false
-	# (longues prises — départ, ralentissements, croisement — : elles portent tout le son, l'ambiance s'efface)
-	var long: bool = _coup3s.playing and _coup3s.stream != null and _coup3s.stream.get_length() > 9.0
+	# (longues prises — départ, ralentissements, croisement — : posées sur la boucle de roulement, qui reste en fond,
+	# baissée comme sous tout coup — comme au Perce-Neige ; effacée, ses creux laissaient des silences, 26/11/2026)
 	if tp._phase == "quai":
 		var en_bas: bool = d_v < lg.longueur_h() * 0.5
-		_ambiance(delta, lg, "funi_quai_bas" if en_bas else "funi_gare_haut", -30.0 if long else -6.0)
+		_ambiance(delta, lg, "funi_quai_bas" if en_bas else "funi_gare_haut", -6.0)
 		if not _funi_ouv_jouee and _t - _funi_t_arrivee >= Funival.T_OUVERTURE:
 			_funi_ouv_jouee = true
 			_coup(lg, "funi_ouverture")
@@ -809,13 +809,14 @@ func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 				_coup(lg, "funi_portes")
 			return
 		_funi_etapes["ferm"] = tp.fermetures_manu
-		# buzzer, puis la fermeture finie T_FERMETURE s avant le départ, puis le buzzer de départ (6 s)
-		var t_ferme: float = Funival.T_FERMETURE + FUNI_PORTES
+		# buzzer (2 s) juste avant que les portes bougent, la prise des portes avec elles (Funival.ouverture_portes :
+		# fermeture de T_FERMETURE + T_PORTES à T_FERMETURE avant le départ), puis le buzzer de départ (6 s) jusqu'au départ
+		var t_ferme: float = Funival.T_FERMETURE + Telepherique.T_PORTES
 		_etape_funi(lg, "buzzer", tp._t_quai < t_ferme + 2.0)
 		_etape_funi(lg, "portes", tp._t_quai < t_ferme)
-		_etape_funi(lg, "buzzer_depart", tp._t_quai < 6.0)
+		_etape_funi(lg, "buzzer_depart", tp._t_quai < FUNI_BUZZER_DEPART)
 		return
-	_ambiance(delta, lg, "funi_tunnel" if dedans else "funi_dehors", -30.0 if long else -6.0)
+	_ambiance(delta, lg, "funi_tunnel" if dedans else "funi_dehors", -6.0)
 	# entrée du tunnel (en montant) : l'instant d'entrée de la prise sur le portail
 	if fv != null and monte and not dedans and v > 1.0:
 		var t_portail: float = (fv.portail_d - d_v) / v
@@ -868,7 +869,9 @@ func _ambiance(delta: float, lg: LigneRemontee, son: String, base: float) -> voi
 		cible = base - 14.0
 	cible += 5.0 * _approche
 	cible += _accord_vitesse(lg, son)[0]
-	if lg.regime() < 0.02 and not son.ends_with("_arrete"):
+	# (boucles de quai du Funival : ce sont les sons de l'arrêt — éteintes à l'arrêt, le quai était muet)
+	var a_l_arret: bool = son.ends_with("_arrete") or son in ["funi_quai_bas", "funi_gare_haut"]
+	if lg.regime() < 0.02 and not a_l_arret:
 		cible = base - 20.0
 	if _ligne.stream != _sons[son]:
 		_ligne.volume_db = move_toward(_ligne.volume_db, -50.0, delta * 80.0)
@@ -889,7 +892,7 @@ func _ambiance(delta: float, lg: LigneRemontee, son: String, base: float) -> voi
 ## gares : plus grave (jusqu'à 0,6) et plus faible (20·log du régime) ; en ligne : un peu plus grave, un peu plus
 ## faible (vent, câble). [décalage de volume (dB), hauteur]
 func _accord_vitesse(lg: LigneRemontee, son: String) -> Array:
-	if son.ends_with("_arrete") or son.begins_with("tph"):
+	if son.ends_with("_arrete") or son.begins_with("tph") or son in ["funi_quai_bas", "funi_gare_haut"]:
 		return [0.0, 1.0]
 	var r: float = clampf(lg.regime(), 0.0, 1.0)
 	if son.contains("gare") or son.contains("motrice") or son.contains("arrivee"):

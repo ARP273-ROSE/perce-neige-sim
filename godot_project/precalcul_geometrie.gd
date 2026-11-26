@@ -202,7 +202,7 @@ func _manque_reel(lg: LigneRemontee, k: int) -> float:
 ## au-dessus de la hauteur des données.
 func _h_haut(lg: LigneRemontee, i: int, t: float) -> float:
 	var p: Dictionary = lg.pylones[i]
-	var haut: float = t + float(p.get("h_max", 36.0))
+	var haut: float = t + lg.h_max_pylone(i)
 	if (_main.relief.fin != null or _retouche) and p.has("h"):
 		haut = minf(haut, t + float(p["h"]) + PLAFOND_FIN)
 	return haut
@@ -223,8 +223,12 @@ func _optimiser(lg: LigneRemontee, h0: Array) -> void:
 	for i in range(n):
 		var p: Dictionary = lg.pylones[i]
 		var t: float = lg.terrain(float(p["d"]))
-		lo.append(t + float(p.get("h_min", 6.5)))
+		lo.append(t + lg.h_min_pylone(i))
 		hi.append(_h_haut(lg, i, t))
+		# (tête de départ hors de ses bornes — borne resserrée depuis le dernier calcul, Marais P2 resté à 26 m
+		# au lieu de 12 : tout pas vers la borne coûtait plus, la tête ne bougeait pas) : ramenée dedans d'abord
+		lg._tetes[i] = clampf(float(lg._tetes[i]), lo[i], maxf(hi[i], lo[i]))
+	lg._preparer_nez()
 	for pas in [8.0, 4.0, 2.0, 1.0, 0.5, 0.25]:
 		for balayage in range(60):
 			var mieux: bool = false
@@ -271,9 +275,8 @@ func _relances(lg: LigneRemontee, h0: Array, effort: int) -> void:
 	for r in range(effort):
 		for i in range(lg.pylones.size()):
 			var t: float = lg.terrain(float(lg.pylones[i]["d"]))
-			var p: Dictionary = lg.pylones[i]
 			lg._tetes[i] = clampf(float(meilleur[i]) + rng.randf_range(-6.0, 6.0),
-				t + float(p.get("h_min", 6.5)), _h_haut(lg, i, t))
+				t + lg.h_min_pylone(i), _h_haut(lg, i, t))
 		lg._preparer_nez()
 		_optimiser(lg, h0)
 		var c: float = _cout_total(lg, h0)

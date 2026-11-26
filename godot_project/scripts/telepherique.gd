@@ -979,17 +979,29 @@ func _maj_lest() -> void:
 			continue
 		var x: float = _x_brin(montee)
 		var y_gare: float = terrain(0.0) + H_CABLE_GARE - 1.3
+		# appuis : la poulie de tension, les pylônes franchis (le lest y passe sur ses galets, sous le sabot), le bout
+		# du chariot ; entre deux, une corde à 2 % de flèche (retour d'utilisateur du 26/11/2026 : « en aval d'une des
+		# cabines, le câble tracteur descend trop bas » — il suivait point par point la hauteur du chariot, donc toute
+		# la flèche du porteur, et sa propre flèche en plus)
+		var ap: Array = [Vector2(da, y_gare)]
+		for p in pylones:
+			var dp: float = float(p["d"])
+			if dp > maxf(da, 0.0) + 2.0 and dp < db - 2.0:
+				ap.append(Vector2(dp, _y_chariot(dp, montee) - 1.25))
+		ap.append(Vector2(db, _y_chariot(db, montee) - 1.25))
 		var pts: PackedVector3Array = PackedVector3Array()
-		var n: int = clampi(int((db - da) / 8.0), 4, 60)
-		var span: float = db - da
-		for k in range(n + 1):
-			var u: float = float(k) / n
-			var dd: float = lerpf(da, db, u)
-			var y0: float = y_gare if dd <= 0.0 else _y_chariot(dd, montee) - 1.25
-			# flèche : 2 % de la portée au milieu, sans descendre à moins de 1,5 m du sol
-			var y: float = y0 - 0.02 * span * 4.0 * u * (1.0 - u)
-			y = maxf(y, _sol(x, -dd) + 1.5)
-			pts.append(Vector3(x, y, -dd))
+		for j in range(ap.size() - 1):
+			var a0: Vector2 = ap[j]
+			var a1: Vector2 = ap[j + 1]
+			var span: float = a1.x - a0.x
+			var n: int = clampi(int(span / 8.0), 2, 60)
+			for k in range(0 if j == 0 else 1, n + 1):
+				var u: float = float(k) / n
+				var dd: float = lerpf(a0.x, a1.x, u)
+				# flèche : 2 % de la portée au milieu, sans descendre à moins de 1,5 m du sol
+				var y: float = lerpf(a0.y, a1.y, u) - 0.02 * span * 4.0 * u * (1.0 - u)
+				y = maxf(y, _sol(x, -dd) + 1.5)
+				pts.append(Vector3(x, y, -dd))
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _tube_lest(pts))
 
 
@@ -1266,7 +1278,21 @@ func _gare_fornet(aval: bool) -> void:
 		var lb: float = 20.0
 		var zb: float = z0 + lq + lb * 0.5
 		var hb: float = 11.0
-		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.0, hb - bas, lb), Vector3(0, bas + (hb - bas) * 0.5, zb), "peinture_anthracite")
+		# (traversé par le hall d'entrée, au droit de la porte de la façade arrière — _facade_fornet —, jusqu'au fond du
+		# quai : retour d'utilisateur du 26/11/2026 : « pour rentrer prendre le TPH Fornet, il faut passer à travers les
+		# murs du bâtiment » — le bâtiment plein fermait le fond du quai, les côtés ont leurs garde-corps)
+		var wb: float = 2.0 * hx + 6.0
+		var xe: float = wb * ENTREE_FORNET[0]
+		var le: float = ENTREE_FORNET[1]
+		var he: float = ENTREE_FORNET[2]
+		var xa: float = xe - le * 0.5
+		var xc: float = xe + le * 0.5
+		RemonteeKit.boite_en(g, Vector3(xa + wb * 0.5, hb - bas, lb), Vector3((xa - wb * 0.5) * 0.5, bas + (hb - bas) * 0.5, zb), "peinture_anthracite")
+		RemonteeKit.boite_en(g, Vector3(wb * 0.5 - xc, hb - bas, lb), Vector3((xc + wb * 0.5) * 0.5, bas + (hb - bas) * 0.5, zb), "peinture_anthracite")
+		RemonteeKit.boite_en(g, Vector3(le, hb - he, lb), Vector3(xe, he + (hb - he) * 0.5, zb), "peinture_anthracite")
+		RemonteeKit.boite_en(g, Vector3(le, -bas, lb), Vector3(xe, bas * 0.5, zb), "beton")
+		# hall : plafond clair
+		RemonteeKit.boite_en(g, Vector3(le - 0.02, 0.04, lb), Vector3(xe, he - 0.02, zb), "blanc_plaque")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.2, 1.2, lb + 0.2), Vector3(0, bas + 0.6, zb), "pierre")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.4, 0.3, lb + 0.4), Vector3(0, hb + 0.15, zb), "noir_mat")
 		await _pause("téléphérique : gare")
@@ -1479,6 +1505,10 @@ func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_pout
 ## bardage de planches noires, socle de pierre, grand vitrage derrière un treillis de mélèze en
 ## branches d'arbres, entrée en retrait à cadre de bois, enseigne blanche, pastille rouge de la
 ## station ; devant, barrières de rondins, lampadaire et mât.
+## Entrée de la gare aval du Fornet : [centre en x (fraction de la largeur du bâtiment), largeur, hauteur] (m).
+const ENTREE_FORNET: Array = [0.18, 5.6, 3.2]
+
+
 func _facade_fornet(g: Node3D, zf: float, wf: float, hb: float, yr: float) -> void:
 	var z: float = zf + 0.02
 	var y0: float = yr + 1.2                       # au-dessus du socle de pierre
@@ -1490,12 +1520,18 @@ func _facade_fornet(g: Node3D, zf: float, wf: float, hb: float, yr: float) -> vo
 	while yb < hb - 0.2:
 		RemonteeKit.boite_en(g, Vector3(wf + 0.02, 0.025, 0.04), Vector3(0, yb, z + 0.01), "noir_mat")
 		yb += 0.32
-	RemonteeKit.boite_en(g, Vector3(xd - xg, hv, 0.08), Vector3((xg + xd) * 0.5, y0 + hv * 0.5, z + 0.02), "vitrage_sombre")
-	# entrée en retrait, cadre de bois doré
-	var xe: float = wf * 0.18
-	var le: float = 5.6
-	var he: float = 3.2
-	RemonteeKit.boite_en(g, Vector3(le, he, 0.12), Vector3(xe, yr + he * 0.5, z + 0.05), "noir_mat")
+	# entrée en retrait, cadre de bois doré : ouverte sur le hall qui traverse le bâtiment jusqu'au quai
+	var xe: float = wf * ENTREE_FORNET[0]
+	var le: float = ENTREE_FORNET[1]
+	var he: float = ENTREE_FORNET[2]
+	# vitrage de part et d'autre de l'entrée, et au-dessus
+	var xa: float = xe - le * 0.5 - 0.35
+	var xc: float = xe + le * 0.5 + 0.35
+	RemonteeKit.boite_en(g, Vector3(xa - xg, hv, 0.08), Vector3((xg + xa) * 0.5, y0 + hv * 0.5, z + 0.02), "vitrage_sombre")
+	RemonteeKit.boite_en(g, Vector3(xd - xc, hv, 0.08), Vector3((xc + xd) * 0.5, y0 + hv * 0.5, z + 0.02), "vitrage_sombre")
+	var yh: float = maxf(yr, 0.0) + he + 0.35
+	if y0 + hv > yh:
+		RemonteeKit.boite_en(g, Vector3(xc - xa, y0 + hv - yh, 0.08), Vector3(xe, (yh + y0 + hv) * 0.5, z + 0.02), "vitrage_sombre")
 	for sxe in [-1.0, 1.0]:
 		RemonteeKit.boite_en(g, Vector3(0.35, he + 0.35, 0.9), Vector3(xe + sxe * (le * 0.5 + 0.17), yr + (he + 0.35) * 0.5, z + 0.45), "bois_meleze")
 	RemonteeKit.boite_en(g, Vector3(le + 0.7, 0.35, 0.9), Vector3(xe, yr + he + 0.17, z + 0.45), "bois_meleze")

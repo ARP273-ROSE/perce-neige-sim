@@ -859,8 +859,14 @@ func _build_bande_couloir(bd: Array) -> void:
 	var mesh: ArrayMesh = st.commit()
 	var r: Rect2 = bd[3]
 	mesh.surface_set_material(0, _materiau_piece(r, Image.create(1, 1, false, Image.FORMAT_L8)))
-	_instance(mesh, "TraceTkd")
+	var mi_c: MeshInstance3D = _instance(mesh, "TraceTkd")
 	_rects_couloirs.append_array(bd[4])
+	if FENETRE > 0.0 and _pas > 1:
+		# (trace damée : chaque sommet suit le couloir sur le sol affiché — recalée avec la fenêtre fine)
+		var b0: PackedFloat32Array = PackedFloat32Array()
+		for v in verts:
+			b0.append(_hauteur_tri(v.x, v.z))
+		_recalables.append({"mi": mi_c, "couloir": [verts, uvs, bd[2]], "b0": b0, "rect": r})
 
 
 func _piece_etalee(am: Dictionary) -> void:
@@ -1210,9 +1216,24 @@ func _fenetre_avancer(fin_us: int) -> void:
 			_h = h_vu
 			_raffine = raff_vu
 			return
+	# 2 bis. pièces fines et traces damées recalées sur le sol du travail (encore _h le temps du pas)
+	if not _recalage_pas(job, fin_us):
+		_h = h_vu
+		_raffine = raff_vu
+		return
 	# 3. fini : tuiles, altitudes et marques échangées dans la même image (_h et _raffine sont déjà ceux du travail)
 	for km in job["maillages"]:
 		(_mi_tuiles[int(km[0])] as MeshInstance3D).mesh = km[1]
+	for rc in job["recal"]:
+		var e: Dictionary = _recalables[int(rc[0])]
+		if is_instance_valid(e["mi"]):
+			(e["mi"] as MeshInstance3D).mesh = rc[1]
+		if e.has("piece"):
+			# (hauteurs d'origine gardées en 6e place : le sol de référence, hauteur_sol_ref)
+			var pc: Array = _pieces[int(e["piece"])]
+			if pc.size() < 6:
+				pc.append(pc[3])
+			pc[3] = rc[2]
 	_f_centre = c
 	_f_cellules = job["nouv"]
 	var tri: int = 0
@@ -1230,13 +1251,106 @@ func _fenetre_avancer(fin_us: int) -> void:
 	sol_modifie.emit(Rect2(r0, r1 - r0).grow(_dx))
 
 
+## Pièces fines et traces damées des TKD recalées sur le sol de la fenêtre fine (retours d'utilisateur, iPad du
+## 26/11/2026 : « un trou après le pylône 2 des Boisses », « les lignes sous les TKD sont bourrées de trous ») : leur
+## bord a été posé sur le sol affiché à leur construction ; la fenêtre refait ce sol (grille à 25 m) et le bord se
+## décollait — fentes le long des gares et des traces. Chaque sommet qui dépend du sol affiché le suit : pièce, de sa
+## part k (1 au bord, 0 au-delà de FONDU_PIECE) ; trace, par le même calcul que sa construction (CouloirsTkd.hauteur).
+## Par tranches (budget de la fenêtre) ; les maillages refaits sont posés à l'échange, avec les tuiles. Vrai : fini.
+var _recalables: Array = []
+
+
+func _recalage_pas(job: Dictionary, fin_us: int) -> bool:
+	if not job.has("recal_l"):
+		var p: int = _pas
+		var zr: Rect2 = Rect2(ReliefDonnees.X_OUEST + int(job["jmin"]) * _dx, ReliefDonnees.Z_NORD + int(job["imin"]) * _dz,
+			(int(job["jmax"]) - int(job["jmin"])) * _dx, (int(job["imax"]) - int(job["imin"])) * _dz).grow(_dx * p)
+		var l: PackedInt32Array = PackedInt32Array()
+		for k in range(_recalables.size()):
+			if (_recalables[k]["rect"] as Rect2).intersects(zr):
+				l.append(k)
+		job["recal_l"] = l
+		job["ir"] = 0
+		job["recal"] = []
+	var l2: PackedInt32Array = job["recal_l"]
+	while int(job["ir"]) < l2.size():
+		var e: Dictionary = _recalables[l2[int(job["ir"])]]
+		var piece: bool = e.has("piece")
+		if not job.has("rv"):
+			var v0: PackedVector3Array = (e["arr"] as Array)[Mesh.ARRAY_VERTEX] if piece else (e["couloir"] as Array)[0]
+			job["rv"] = v0.duplicate()
+			job["iv"] = 0
+		var rv: PackedVector3Array = job["rv"]
+		job["rv"] = null
+		var iv: int = job["iv"]
+		var b0: PackedFloat32Array = e["b0"]
+		if piece:
+			var idx: PackedInt32Array = e["iv"]
+			var kk: PackedFloat32Array = e["k"]
+			var v0p: PackedVector3Array = (e["arr"] as Array)[Mesh.ARRAY_VERTEX]
+			while iv < idx.size():
+				var t: int = idx[iv]
+				var q: Vector3 = v0p[t]
+				rv[t] = Vector3(q.x, q.y + (_hauteur_tri(q.x, q.z) - b0[iv]) * kk[iv], q.z)
+				iv += 1
+				if iv % 128 == 0 and Time.get_ticks_usec() > fin_us:
+					job["rv"] = rv
+					job["iv"] = iv
+					return false
+		else:
+			var v0c: PackedVector3Array = (e["couloir"] as Array)[0]
+			while iv < v0c.size():
+				var q2: Vector3 = v0c[iv]
+				var bn: float = _hauteur_tri(q2.x, q2.z)
+				var hn: float = couloirs.hauteur(q2.x, q2.z, bn) if couloirs != null else NAN
+				var ho: float = couloirs.hauteur(q2.x, q2.z, b0[iv]) if couloirs != null else NAN
+				rv[iv] = Vector3(q2.x, q2.y + (bn if is_nan(hn) else hn) - (b0[iv] if is_nan(ho) else ho), q2.z)
+				iv += 1
+				if iv % 128 == 0 and Time.get_ticks_usec() > fin_us:
+					job["rv"] = rv
+					job["iv"] = iv
+					return false
+		# maillage refait
+		var old: Mesh = (e["mi"] as MeshInstance3D).mesh if is_instance_valid(e["mi"]) else null
+		var mat: Material = old.surface_get_material(0) if old != null and old.get_surface_count() > 0 else null
+		var mesh: ArrayMesh
+		var hs: PackedFloat32Array = PackedFloat32Array()
+		if piece:
+			var a2: Array = (e["arr"] as Array).duplicate()
+			a2[Mesh.ARRAY_VERTEX] = rv
+			mesh = ArrayMesh.new()
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a2)
+			hs.resize(rv.size())
+			for i in range(rv.size()):
+				hs[i] = rv[i].y
+		else:
+			var st: SurfaceTool = SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			var uvs: PackedVector2Array = (e["couloir"] as Array)[1]
+			for i2 in range(rv.size()):
+				st.set_uv(uvs[i2])
+				st.add_vertex(rv[i2])
+			for k3 in ((e["couloir"] as Array)[2] as PackedInt32Array):
+				st.add_index(k3)
+			st.generate_normals()
+			mesh = st.commit()
+		if mat != null:
+			mesh.surface_set_material(0, mat)
+		(job["recal"] as Array).append([l2[int(job["ir"])], mesh, hs])
+		job.erase("rv")
+		job["ir"] = int(job["ir"]) + 1
+		if Time.get_ticks_usec() > fin_us:
+			return int(job["ir"]) >= l2.size()
+	return true
+
+
 ## Sol sans la fenêtre fine (celui sur lequel les objets du domaine sont posés au chargement).
 func hauteur_sol_ref(x: float, z: float) -> float:
 	if not _f_active or _h_aff0.is_empty():
 		return hauteur_sol(x, z)
 	for k in _pieces_case(x, z):
 		if (_pieces[k][0] as Rect2).has_point(Vector2(x, z)):
-			var tp: Array = terrain_piece(x, z)
+			var tp: Array = terrain_piece(x, z, true)
 			if not is_nan(float(tp[0])):
 				return float(tp[0])
 	if fin != null and fin.fine_ici(x, z):
@@ -2188,6 +2302,9 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	var nz: int = int(ceil(r.size.y / PAS_PIECE)) + 1
 	var lx: float = r.size.x / (nx - 1)
 	var lz: float = r.size.y / (nz - 1)
+	# (fenêtre fine de la PWA : sommets qui dépendent du sol affiché, recalés quand elle le refait — _recalage_pas)
+	var recal: Variant = {"iv": PackedInt32Array(), "k": PackedFloat32Array(), "b0": PackedFloat32Array()} \
+		if FENETRE > 0.0 and _pas > 1 else null
 	# axe des couloirs : points de la voie tous les 2 m
 	var axes: Array = []
 	for c in am.get("couloirs", []):
@@ -2214,11 +2331,17 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 			var z: float = r.position.y + i * lz
 			var q: Vector2 = Vector2(x, z)
 			var h: float = _hauteur_tri(x, z)
+			var k_bloc: float = 1.0           # part du sol affiché dans ce sommet (recalage par la fenêtre fine)
 			# maille à 50 m (crans bas) : l'intérieur de la pièce reste sur la grille à 25 m, celle pour
 			# laquelle les ouvrages sont réglés (la neige montait de 0,9 m au pied de l'escalier de la terrasse)
 			if _pas > 1 and (fin == null or not fin.fine_ici(x, z)):
 				var d_bord: float = minf(minf(x - r.position.x, r.end.x - x), minf(z - r.position.y, r.end.y - z))
-				h = lerpf(h, _tri_sur(_h25, x, z, 1), smoothstep(0.0, FONDU_PIECE, d_bord))
+				k_bloc = 1.0 - smoothstep(0.0, FONDU_PIECE, d_bord)
+				h = lerpf(h, _tri_sur(_h25, x, z, 1), 1.0 - k_bloc)
+			if recal != null and k_bloc > 0.001:
+				recal["iv"].append(verts.size())
+				recal["k"].append(k_bloc)
+				recal["b0"].append(_hauteur_tri(x, z))
 			# bords de la pièce : exactement le bloc (aucune marche)
 			var bord: bool = i == 0 or j == 0 or i == nz - 1 or j == nx - 1
 			if not bord:
@@ -2340,7 +2463,7 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	if _pieces_abandon:
 		return
 	mesh.surface_set_material(0, _materiau_piece(r, img))
-	_instance(mesh, "PieceGare")
+	var mi_p: MeshInstance3D = _instance(mesh, "PieceGare")
 	if au_masque:
 		_rects_masque.append(r)
 	else:
@@ -2350,6 +2473,12 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 		hs.append(v.y)
 	_pieces.append([r, nx, nz, hs, img])
 	_indexer_pieces()
+	if recal != null and not (recal["iv"] as PackedInt32Array).is_empty():
+		recal["mi"] = mi_p
+		recal["arr"] = arr
+		recal["rect"] = r
+		recal["piece"] = _pieces.size() - 1
+		_recalables.append(recal)
 
 
 ## Matériau d'une pièce fine (et des traces damées) : celui du relief, emprise et masque des bâtiments.
@@ -2400,7 +2529,7 @@ func _pieces_case(x: float, z: float) -> PackedInt32Array:
 
 ## Terrain affiché en (x, z) dans une pièce fine : [altitude, retiré (dans
 ## un bâtiment)] ; [NAN, false] hors des pièces. Pour les bancs.
-func terrain_piece(x: float, z: float) -> Array:
+func terrain_piece(x: float, z: float, ref: bool = false) -> Array:
 	for k in _pieces_case(x, z):
 		var pc: Array = _pieces[k]
 		var r: Rect2 = pc[0]
@@ -2414,7 +2543,7 @@ func terrain_piece(x: float, z: float) -> Array:
 		var i: int = clampi(int(fz), 0, nz - 2)
 		var u: float = fx - j
 		var v: float = fz - i
-		var hs: PackedFloat32Array = pc[3]
+		var hs: PackedFloat32Array = pc[5] if ref and pc.size() > 5 else pc[3]
 		var h: float = lerpf(lerpf(hs[i * nx + j], hs[i * nx + j + 1], u),
 			lerpf(hs[(i + 1) * nx + j], hs[(i + 1) * nx + j + 1], u), v)
 		var img: Image = pc[4]

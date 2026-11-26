@@ -142,6 +142,7 @@ var vitesse_pilote: float = 12.0
 var _v_ski: Vector3 = Vector3.ZERO
 var _cap_ski: float = 0.0
 var _penche: float = 0.0
+var _n_vis: Vector3 = Vector3.UP          # normale du sol lissée, pour poser les skis sur la pente
 var _vue_libre: float = 99.0            # s depuis le dernier glissé de la vue
 ## Pilote EXPERT (BOUCLE) : il carve « comme Odermatt » au lieu du
 ## chasse-neige à 40 km/h d'une première étoile (retour d'utilisateur, 12/10/2026) —
@@ -1578,7 +1579,15 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	_v_ski = v
 	velocity = v
 	_cap = _cap_ski
-	_visuel.rotation = Vector3(0.0, _cap_ski, _penche)
+	# skis posés sur la pente (retour d'utilisateur du 26/11/2026 : « le skieur garde ses skis horizontaux quel que
+	# soit le terrain ») : la normale du sol, lissée, incline tout le visuel — en plein dans le sens des skis, à moitié
+	# en travers (en traversée, les carres mordent et le corps reste plus droit que la pente)
+	_n_vis = _n_vis.lerp(n2, minf(1.0, delta * 8.0)).normalized()
+	var droite: Vector3 = Basis(Vector3.UP, _cap_ski) * Vector3.RIGHT
+	var nv: Vector3 = (_n_vis - droite * _n_vis.dot(droite) * 0.5).normalized()
+	if nv.y < cos(deg_to_rad(40.0)):
+		nv = Vector3(nv.x, 0.0, nv.z).normalized() * sin(deg_to_rad(40.0)) + Vector3.UP * cos(deg_to_rad(40.0))
+	_visuel.basis = Basis(Quaternion(Vector3.UP, nv)) * Basis.from_euler(Vector3(0.0, _cap_ski, _penche))
 	if not premiere_personne:
 		_visuel.visible = true          # (1re personne : _camera() décide, jambes et skis visibles)
 

@@ -1161,10 +1161,41 @@ func _precalcul_complet() -> bool:
 var y_origine: float = 0.0
 
 
+## Hauteur des pylônes (sol → câble) par type d'appareil, quand la fiche n'en donne pas de mesurée (demande
+## d'utilisateur du 26/11/2026 : « borne hauteur max/min des pylônes en fonction de chaque type de remontée, de la
+## réglementation et de la réalité ») :
+##   téléski 4–9 m : perche à portée du skieur (au-delà de 9 m au pylône, elle ne l'atteint plus) ;
+##   télésiège fixe 5–18 m, débrayable 6–25 m : évacuation à la corde — siège à 15 m du sol au plus en règle
+##   générale (EN 12929-1 / STRMTG), 25 m par exception, plus les 2 à 3 m de la suspente ; parcs réels : 8 à 20 m ;
+##   télécabine 7–35 m (évacuation par treuil ; parcs réels 10 à 35 m) ; 3S, téléphériques : pas de borne (90 m).
+## Minimum : garde du véhicule au-dessus de la neige damée. Une hauteur mesurée (h_min / h_max des données)
+## l'emporte ; les pylônes de nez, calés sur le câble en gare, n'y sont pas soumis.
+static func bornes_hauteur(fam: String) -> Vector2:
+	if fam.begins_with("perche"):
+		return Vector2(4.0, 9.0)
+	if fam.begins_with("siege_fixe"):
+		return Vector2(5.0, 18.0)
+	if fam.begins_with("siege"):
+		return Vector2(6.0, 25.0)
+	if fam in ["cabine_3s", "cabine_tph", "cabine_funi"]:
+		return Vector2(10.0, 90.0)
+	if fam.begins_with("cabine"):
+		return Vector2(7.0, 35.0)
+	return Vector2(6.0, 36.0)
+
+
+func h_min_pylone(i: int) -> float:
+	return float((pylones[i] as Dictionary).get("h_min", bornes_hauteur(famille).x))
+
+
+func h_max_pylone(i: int) -> float:
+	return float((pylones[i] as Dictionary).get("h_max", bornes_hauteur(famille).y))
+
+
 func _bornes_tetes() -> void:
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
-		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
+		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else h_max_pylone(i3)))
 		# croisement : pylône à deux étages (RemonteesDomaine._croisements)
 		var p3: Dictionary = pylones[i3]
 		# altitude du câble donnée par une source : elle ne dépend pas du relief chargé
@@ -1524,12 +1555,18 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 					elif cd and ga and not ca:
 						dr = false
 				var f: float = 0.6 if (ga and dr) else 1.0
-				if ga:
-					_tetes[i - 1] += pire * f
-				if dr:
-					_tetes[i] += pire * f
-				change = true
-				a_bouge = true
+				var bouge: bool = false
+				for j in ([i - 1] if ga else []) + ([i] if dr else []):
+					# (hauteur maximale du pylône — mesurée, sinon celle de son type, bornes_hauteur — : pas au-delà ; retour d'utilisateur, 26/11/2026 :
+					# Marais P2 relevé à 26 m pour la garde d'un sol qui monte dès la sortie de gare, réel ~10 m)
+					var plafond: float = terrain(float(pylones[j]["d"])) + h_max_pylone(j)
+					var hn: float = minf(_tetes[j] + pire * f, maxf(plafond, _tetes[j]))
+					if hn > _tetes[j] + 1e-4:
+						_tetes[j] = hn
+						bouge = true
+				if bouge:
+					change = true
+					a_bouge = true
 		if not change:
 			break
 	return a_bouge
@@ -7933,9 +7970,18 @@ func _roues_proches(delta: float) -> void:
 	if _roues_tour == 0:
 		for q in _pyl:
 			var py: PyloneRemontee = q[0]
-			if not (py is PyloneRemontee) or py._paires[true].is_empty():
+			if not (py is PyloneRemontee):
 				continue
 			var pres: bool = Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() < ROUES_JUSQUA
+			if py._paires[true].is_empty():
+				# (TKD : leurs poulies tournent sans rien à reconstruire)
+				if py._poulies_tkd.is_empty() or pres == _roues_vues.has(py):
+					continue
+				if pres:
+					_roues_vues.append(py)
+				else:
+					_roues_vues.erase(py)
+				continue
 			if pres != (not py._roues.is_empty()):
 				py.roues_tournantes(pres)
 				if pres:

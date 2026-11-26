@@ -1338,6 +1338,14 @@ func _gare_aval() -> void:
 	var zb: float = -(dq - lq * 0.5) + 6.0
 	var xb: float = -(W + 6.0 + 7.5)
 	RemonteeKit.boite_en(g, Vector3(15.0, 3.2, 11.0), Vector3(xb, yb + 1.6, zb), "beton")
+	# soubassement jusqu'au terrain le plus bas sous l'emprise (retour d'utilisateur du 26/11/2026 : « un bâtiment en
+	# bas du Funival est en lévitation » — posé au plancher du quai, le terrain descend dessous)
+	var y_bas: float = yb
+	for i in range(5):
+		for j in range(5):
+			y_bas = minf(y_bas, _sol(xb - 7.5 + i * 3.75, zb - 5.5 + j * 2.75))
+	if y_bas < yb - 0.05:
+		RemonteeKit.boite_en(g, Vector3(15.2, yb - y_bas + 0.6, 11.2), Vector3(xb, (yb + y_bas - 0.6) * 0.5, zb), "beton")
 	var bois: Material = mat_funi("bois_gris")
 	for f in [[Vector3(15.1, 2.6, 0.06), Vector3(xb, yb + 1.9, zb + 5.53)], [Vector3(0.06, 2.6, 11.0), Vector3(xb - 7.53, yb + 1.9, zb)],
 			[Vector3(0.06, 2.6, 11.0), Vector3(xb + 7.53, yb + 1.9, zb)]]:
@@ -2598,10 +2606,12 @@ func sous_la_roche(p: Vector3) -> bool:
 
 ## Le point p (monde) est dans la caisse d'un véhicule : le skieur y est porté, la ligne doit tourner à pleine cadence, collisions comprises.
 ## Portes du Funival, au rythme de la vidéo de la montée (retour d'utilisateur du 25/11/2026, sons réels) : à l'arrêt,
-## les compresseurs, puis l'ouverture 3 s après (T_OUVERTURE) ; au départ, buzzer, fermeture (14 s de claquements
-## désynchronisés), portes closes T_FERMETURE s avant le départ, le temps du buzzer de départ.
+## les compresseurs, puis l'ouverture 3 s après (T_OUVERTURE) ; au départ, le buzzer (2 s), PUIS la fermeture, portes
+## closes T_FERMETURE s avant le départ ; le buzzer de départ (6 s) et on part (retour d'utilisateur du 26/11/2026 :
+## « quand tu fermes les portes, tu lances le buzzer de 2 s puis tu fermes ; quand tu pars, tu lances le buzzer de
+## départ puis tu pars » — la prise des portes partait 13 s avant leur fermeture, le départ 13 s après).
 const T_OUVERTURE: float = 3.0
-const T_FERMETURE: float = 13.0
+const T_FERMETURE: float = 7.5
 
 
 func ouverture_portes() -> float:

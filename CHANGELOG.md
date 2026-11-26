@@ -5,6 +5,54 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version
+
+- **Trou après le P2 des Boisses (PWA)** (retour d'utilisateur, iPad du 26/11/2026) : la fenêtre de relief fin autour
+  du point de vue (PWA, maille à 50 m) refait le sol à 25 m ; le bord des pièces fines des gares, posé sur l'ancien sol,
+  se décollait — fente le long du palier Brévières – Boisses. Les sommets des pièces qui dépendent du sol affiché le
+  suivent maintenant, recalés par tranches avec les tuiles et posés au même échange (les jalons gardent le sol d'origine
+  des pièces comme référence). Vérifié en capture (OpenGL, cran 3, fenêtre de 800 m) et au banc de la fenêtre.
+- **Marais : P2 à P4 trop hauts** (« les pylônes 2, 3, 4 du Marais sont trop hauts ») : 12, 14 et 17 m au lieu de 26,
+  31 et 35 m (P5 20 m au lieu de 33). Le relevage pour la garde au sol ne dépasse plus la hauteur mesurée d'un pylône,
+  et le calcul des têtes ramène dans ses bornes une tête qui en sort ; l'angle au nez de gare tombe de 21 à 14°.
+- **Hauteur des pylônes bornée par type d'appareil** (demande d'utilisateur du 26/11/2026 : « borne hauteur max/min
+  des pylônes en fonction de chaque type de remontée, de la réglementation et de la réalité ») : téléski 4–9 m,
+  télésiège fixe 5–18 m, débrayable 6–25 m (évacuation à la corde : siège à 15 m du sol en règle générale, 25 m par
+  exception), télécabine 7–35 m ; une hauteur mesurée l'emporte, les pylônes de nez restent calés sur la gare. Toutes
+  les lignes recalculées : Merles, Marais, Pyramides, Marmottes, Loyes, Aiguille Rouge et Percée de 30–36 m à 25 m,
+  Col des Ves et Grand Pré de 23–25 m à 18 m ; aucune de ces lignes ne passe sous la garde au sol.
+- **Skis posés sur la pente** (« le skieur garde ses skis horizontaux quel que soit le terrain ») : le skieur s'incline
+  sur la normale du sol, lissée — en plein dans le sens des skis, à moitié en travers, 40° au plus.
+- **Traces des TKD trouées (PWA)** (« les lignes sous les TKD sont bourrées de trous ») : même cause que le palier des
+  Boisses ; les traces damées sont recalées de même sur le sol de la fenêtre. Vérifié en capture au Chardonnet.
+- **Poulies des pylônes de TKD** (« la roue est reliée au pylône par une potence et un axe horizontal, pas un
+  mécanisme de roue de puits ; des guides écartent la perche à l'extérieur de la roue ») : roue à flasque plein en
+  porte-à-faux sur un axe horizontal dans l'axe de la potence (« la poulie est dans l'axe de la potence, pas en
+  dessous ») : le bras arrive à la hauteur du moyeu, côté fût, le fût s'arrête au-dessus ; côté extérieur, deux
+  guides cintrés tenus par une traverse sous la roue.
+- **Poulies des TKD qui tournent** (« les roues des pylônes des TKD ne tournent pas ») : chaque roue tourne avec la
+  ligne près du point de vue, dans le sens du câble.
+- **Départ des TKD : poulie de compression au nez** (« il manque une poulie verticale au départ du TKD, sinon l'angle
+  du câble est fantôme ») : le brin montée descend de la roue le long du magasin puis remonte vers le premier pylône ;
+  une poulie verticale le tient par-dessus au nez, sur une potence au sol côté extérieur.
+- **Téléphérique du Fornet, gare aval : on entre par le hall** (« il faut passer à travers les murs du bâtiment ») :
+  le bâtiment de la machinerie fermait tout le fond du quai ; l'entrée de la façade arrière ouvre maintenant sur un hall
+  qui le traverse jusqu'au quai.
+- **Fornet : câble lest** (« en aval d'une des cabines, le câble tracteur descend trop bas ») : il suivait la hauteur
+  du chariot point par point, flèche du porteur comprise, plus la sienne ; il est tendu en cordes de la poulie de
+  tension aux pylônes puis au chariot (2 % de flèche par portée).
+- **Funival, gare aval : bâtiment posé au sol** (« un bâtiment en bas du Funival est en lévitation ») : soubassement
+  de béton jusqu'au terrain le plus bas sous son emprise.
+- **Funival, sons** (« quand tu fermes les portes, tu lances le buzzer de 2 s puis tu fermes ; quand tu pars, le
+  buzzer de départ puis tu pars ; la boucle sonore a des trous et des silences — inspire-toi du Perce-Neige ») : le
+  buzzer juste avant que les portes bougent, la prise des portes avec elles, portes closes 7,5 s avant le départ
+  (13 avant), le buzzer de départ jusqu'au départ. La boucle de roulement reste en fond sous les longues prises
+  (départ, ralentissements, croisement), baissée comme sous tout coup, au lieu d'être effacée ; ces prises, 10 à 17 dB
+  sous le roulement, sont remises à niveau (gain suivant l'enveloppe, sans écrêtage), la boucle de la gare du haut
+  (−35 dB) aussi ; les boucles de quai ne sont plus éteintes à l'arrêt.
+- Funival, gare du haut : le relief qui entre dans la salle n'a pas été reproduit, ni sur PC ni en rendu PWA
+  (fenêtre de relief comprise) ; la correction de la fenêtre ci-dessus touche aussi la pièce de cette gare.
+
 ## 1.78.1 — 25 novembre 2026
 
 - **Funival : sons à bord** (retour d'utilisateur du 25/11/2026 : « aucun son du Funival ») : ils ne jouaient que pour

@@ -792,6 +792,13 @@ func roues_tournantes(actif: bool) -> void:
 func tourner_roues(dphi: float) -> void:
 	for r in _roues:
 		(r[0] as Node3D).rotate_object_local(Vector3.UP, float(r[1]) * dphi)
+	# poulies des TKD (retour d'utilisateur du 26/11/2026 : « les roues des pylônes des TKD ne tournent pas »)
+	var k: float = R_GALET / R_POULIE_PYL_TKD
+	for p in _poulies_tkd:
+		(p[0] as Node3D).rotate_object_local(Vector3.RIGHT, float(p[1]) * dphi * k)
+
+
+var _poulies_tkd: Array = []          # [roue, sens] des poulies de ligne d'un TKD
 
 
 ## Paires calées sur le câble TEL QU'IL EST AFFICHÉ (flèche sous les
@@ -910,36 +917,30 @@ func _bras_treillis_tkd(h: float, bout: float, xs: Array) -> void:
 const R_POULIE_PYL_TKD: float = 0.40
 
 
+## Brin d'un TKD porté par une grande poulie (galets « S » seulement) : même règle que _construire_teleski.
+func _poulie_tkd_porteuse(montee: bool) -> bool:
+	for g in (compo_montee if montee else compo_descente):
+		if String(g[1]) == "C":
+			return false
+	return true
+
+
 ## Grande poulie de pylône d'un TKD sous le câble (point d'appui `c`), dans le plan vertical de la ligne,
 ## inclinée de `tilt` autour du câble (rentrée du brin retour au premier pylône) ; chape jusqu'au bras en `y_bras`.
-func _grande_poulie_tkd(c: Vector3, tilt: float, y_bras: float) -> void:
+func _grande_poulie_tkd(c: Vector3, tilt: float, y_bras: float, montee: bool = true) -> void:
 	var R: float = R_POULIE_PYL_TKD
 	var n: Node3D = Node3D.new()
 	n.name = "PoulieTKD"
 	n.transform = Transform3D(Basis(Vector3.BACK, tilt), c)
 	add_child(n)
 	var o: Vector3 = Vector3(0, -R - 0.012, 0)          # centre : le câble repose au fond de la gorge
-	RemonteeKit.tube(n, RemonteeKit.arc(o, Vector3.BACK, Vector3.UP, R, 0.0, TAU, 36), 0.03, "caoutchouc", 8)
-	for dx in [-0.045, 0.045]:
-		RemonteeKit.tube(n, RemonteeKit.arc(o + Vector3(dx, 0, 0), Vector3.BACK, Vector3.UP, R + 0.035, 0.0, TAU, 36), 0.018, "galva", 6)
-	for k in range(6):
-		var a: float = TAU * (k + 0.5) / 6.0
-		RemonteeKit.barre(n, o + Vector3(0, sin(a), cos(a)) * 0.08, o + Vector3(0, sin(a), cos(a)) * (R - 0.02), 0.022, "galva", 5)
-	RemonteeKit.cylindre(n, 0.08, 0.08, 0.13, Transform3D(Basis(Vector3.BACK, PI * 0.5), o), "galva", 14)
-	RemonteeKit.cylindre(n, 0.025, 0.025, 0.30, Transform3D(Basis(Vector3.BACK, PI * 0.5), o), "acier_noir", 8)
-	# chape : deux joues de part et d'autre, de l'axe au-dessus de la poulie, puis suspente jusqu'au bras
-	var yh: float = 0.12
-	for dx2 in [-0.13, 0.13]:
-		RemonteeKit.boite_en(n, Vector3(0.02, yh - o.y, 0.14), Vector3(dx2, (yh + o.y) * 0.5, 0), "galva")
-	RemonteeKit.boite_en(n, Vector3(0.30, 0.04, 0.14), Vector3(0, yh, 0), "galva")
-	var haut: float = y_bras - c.y
-	RemonteeKit.boite_en(self, Vector3(0.08, haut - yh, 0.10), c + Vector3(0, (haut + yh) * 0.5, 0), "galva")
+	_monture_poulie_tkd(n, o, y_bras, montee)
 
 
 ## Poulie de pylône d'un TKD sous le point d'appui `c` : son axe est perpendiculaire au câble qui arrive (`e`)
 ## et à celui qui repart (`s`), son centre du côté où le câble tourne, à R sous la gorge ; le câble l'enroule
 ## sur l'angle de sa déviation, tangent des deux côtés.
-func _poulie_tkd_dans_le_plan(c: Vector3, e: Vector3, s: Vector3, y_bras: float) -> void:
+func _poulie_tkd_dans_le_plan(c: Vector3, e: Vector3, s: Vector3, y_bras: float, montee: bool = true) -> void:
 	var R: float = R_POULIE_PYL_TKD
 	e = e.normalized()
 	s = s.normalized()
@@ -957,25 +958,60 @@ func _poulie_tkd_dans_le_plan(c: Vector3, e: Vector3, s: Vector3, y_bras: float)
 	n.name = "PoulieTKD"
 	n.transform = Transform3D(Basis(axe, yv, zv), c)
 	add_child(n)
-	var o: Vector3 = Vector3(0, -R - 0.012, 0)
-	RemonteeKit.tube(n, RemonteeKit.arc(o, Vector3.BACK, Vector3.UP, R, 0.0, TAU, 36), 0.03, "caoutchouc", 8)
+	_monture_poulie_tkd(n, Vector3(0, -R - 0.012, 0), y_bras, montee)
+
+
+## Poulie de ligne d'un TKD et sa monture (retour d'utilisateur du 26/11/2026 : « la roue est reliée au pylône par
+## une potence et un axe horizontal, pas un mécanisme qui ressemble à une roue de puits ; pour passer les pylônes, des
+## guides écartent la perche à l'extérieur de la roue, sinon ça ne marche pas ») : roue à flasque plein garnie de
+## caoutchouc, en porte-à-faux sur un axe horizontal dans l'axe de la potence (retour du 26/11/2026 : « la poulie est
+## dans l'axe de la potence, pas en dessous ») : le bras du pylône arrive à la hauteur du centre de la roue, côté fût,
+## et l'axe le prolonge jusqu'au moyeu (platine au bout du bras). Côté extérieur, rien au-dessus de la gorge — la pince y passe — et deux guides courbes, tenus par
+## une traverse sous la roue, écartent la perche de la jante avant le pylône et la ramènent après.
+## `n` : repère de la poulie (X = axe), `o` : centre de la roue, `y_bras` : dessous du bras (repère du pylône).
+func _monture_poulie_tkd(n: Node3D, o: Vector3, y_bras: float, montee: bool = true) -> void:
+	var R: float = R_POULIE_PYL_TKD
+	# côté fût dans le repère de la poulie
+	var vers_fut: Vector3 = n.transform.basis.inverse() * Vector3(signf(x_fut - n.position.x) if absf(x_fut - n.position.x) > 0.01 else 1.0, 0, 0)
+	var si: float = signf(vers_fut.x) if absf(vers_fut.x) > 1e-3 else 1.0
+	var axe_x: Transform3D = Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3.ZERO)
+	# roue (nœud à part, qui tourne : tourner_roues) : bandage caoutchouc, joues de la gorge, flasque plein
+	# percé de six jours (on la voit tourner), moyeu
+	var roue: Node3D = Node3D.new()
+	roue.name = "Roue"
+	roue.position = o
+	n.add_child(roue)
+	RemonteeKit.tube(roue, RemonteeKit.arc(Vector3.ZERO, Vector3.BACK, Vector3.UP, R, 0.0, TAU, 36), 0.03, "caoutchouc", 8)
 	for dx in [-0.045, 0.045]:
-		RemonteeKit.tube(n, RemonteeKit.arc(o + Vector3(dx, 0, 0), Vector3.BACK, Vector3.UP, R + 0.035, 0.0, TAU, 36), 0.018, "galva", 6)
+		RemonteeKit.tube(roue, RemonteeKit.arc(Vector3(dx, 0, 0), Vector3.BACK, Vector3.UP, R + 0.035, 0.0, TAU, 36), 0.018, "galva", 6)
+	RemonteeKit.cylindre(roue, R - 0.02, R - 0.02, 0.025, axe_x, "galva", 28)
 	for k in range(6):
-		var a: float = TAU * (k + 0.5) / 6.0
-		RemonteeKit.barre(n, o + Vector3(0, sin(a), cos(a)) * 0.08, o + Vector3(0, sin(a), cos(a)) * (R - 0.02), 0.022, "galva", 5)
-	RemonteeKit.cylindre(n, 0.08, 0.08, 0.13, Transform3D(Basis(Vector3.BACK, PI * 0.5), o), "galva", 14)
-	RemonteeKit.cylindre(n, 0.025, 0.025, 0.30, Transform3D(Basis(Vector3.BACK, PI * 0.5), o), "acier_noir", 8)
-	# chape : deux joues de part et d'autre de la poulie, de l'axe jusqu'au-dessus de la gorge
-	var yh: float = 0.12
-	for dx2 in [-0.13, 0.13]:
-		RemonteeKit.boite_en(n, Vector3(0.02, yh - o.y, 0.14), Vector3(dx2, (yh + o.y) * 0.5, 0), "galva")
-	RemonteeKit.boite_en(n, Vector3(0.30, 0.04, 0.14), Vector3(0, yh, 0), "galva")
-	# suspente verticale du haut de la chape jusqu'au bras
-	var haut_chape: Vector3 = n.transform * Vector3(0, yh, 0)
-	var haut: float = y_bras - haut_chape.y
-	if haut > 0.02:
-		RemonteeKit.boite_en(self, Vector3(0.08, haut, 0.10), haut_chape + Vector3(0, haut * 0.5, 0), "galva")
+		var a: float = TAU * k / 6.0
+		RemonteeKit.cylindre(roue, 0.055, 0.055, 0.035, Transform3D(axe_x.basis, Vector3(0, sin(a), cos(a)) * (R * 0.55)), "acier_noir", 10)
+	RemonteeKit.cylindre(roue, 0.08, 0.08, 0.13, axe_x, "galva", 14)
+	# sens : le haut de la roue (sous le câble) file comme le câble — vers l'amont (−Z du pylône) au brin montant
+	var file: Vector3 = n.transform.basis.inverse() * Vector3(0, 0, -1.0 if montee else 1.0)
+	_poulies_tkd.append([roue, signf(file.z) if absf(file.z) > 1e-3 else 1.0])
+	# axe horizontal en porte-à-faux, côté fût, et sa platine
+	var la: float = 0.30
+	RemonteeKit.cylindre(n, 0.035, 0.035, la, Transform3D(axe_x.basis, o + Vector3(si * (0.065 + la * 0.5), 0, 0)), "acier_noir", 10)
+	var xp: float = si * (0.065 + la)
+	RemonteeKit.boite_en(n, Vector3(0.03, 0.26, 0.24), o + Vector3(xp, 0.02, 0), "galva")
+	# guides de perche, côté extérieur : traverse sous la roue, deux montants, deux lisses cintrées vers l'extérieur
+	var yt: float = o.y - R - 0.10
+	var xe: float = -si * 0.30
+	RemonteeKit.barre(n, Vector3(xp, o.y, 0), Vector3(xp, yt, 0), 0.025, "galva", 6)
+	RemonteeKit.barre(n, Vector3(xp, yt, 0), Vector3(xe, yt, 0), 0.025, "galva", 6)
+	for zm in [-(R + 0.12), R + 0.12]:
+		RemonteeKit.barre(n, Vector3(xe, yt, 0), Vector3(xe, yt + 0.05, zm), 0.02, "galva", 5)
+		RemonteeKit.barre(n, Vector3(xe, yt + 0.05, zm), Vector3(xe, -0.12, zm), 0.02, "galva", 5)
+	for yl in [-0.12, o.y]:
+		var pts: PackedVector3Array = PackedVector3Array()
+		for k in range(13):
+			var z: float = lerpf(1.3, -1.3, k / 12.0)
+			var w: float = 1.0 - smoothstep(R + 0.12, 1.3, absf(z))
+			pts.append(Vector3(-si * lerpf(0.06, 0.30, w), yl, z))
+		RemonteeKit.tube(n, pts, 0.018, "jaune_securite", 6)
 
 
 func _construire_teleski() -> void:
@@ -996,6 +1032,8 @@ func _construire_teleski() -> void:
 		x_fut = 0.0
 	RemonteeKit.boite_en(self, Vector3(1.0, 0.5, 1.0), Vector3(x_fut, -0.1, 0), "beton")
 	var h_fut: float = h + (1.7 + maxf(dy_retour, 0.0) if tkd else 0.0)
+	if tkd and cote == 0 and _poulie_tkd_porteuse(true) and _poulie_tkd_porteuse(false):
+		h_fut = h + maxf(dy_retour, 0.0) - 0.3          # (bras dans l'axe des poulies : le fût s'arrête au-dessus)
 	RemonteeKit.cylindre(self, 0.17, 0.13, h_fut, Transform3D(Basis.IDENTITY, Vector3(x_fut, h_fut * 0.5, 0)), "galva", 14)
 	if tkd:
 		RemonteeKit.cylindre(self, 0.14, 0.14, 0.04, Transform3D(Basis.IDENTITY, Vector3(x_fut, h_fut + 0.02, 0)), "galva", 14)
@@ -1022,7 +1060,14 @@ func _construire_teleski() -> void:
 		# un bras par brin, de part et d'autre du fût ; celui du retour plus haut
 		for mt in [true, false]:
 			var xb: float = _x_brin(mt)
-			_bras_treillis_tkd(h + (0.0 if mt else dy_retour), xb + signf(xb - x_fut) * 0.25, [xb])
+			var dyb0: float = 0.0 if mt else dy_retour
+			if _poulie_tkd_porteuse(mt):
+				# poulie dans l'axe de la potence : le bras s'arrête au bout de l'axe, côté fût, son milieu au centre
+				# de la roue (_monture_poulie_tkd)
+				var yc0: float = h - DESSUS_BRAS_TELESKI + dyb0 - R_POULIE_PYL_TKD - 0.012
+				_bras_treillis_tkd(yc0 + 0.02 + BRAS_TKD * 0.5, xb + signf(x_fut - xb) * (0.065 + 0.30), [])
+			else:
+				_bras_treillis_tkd(h + dyb0, xb + signf(xb - x_fut) * 0.25, [xb])
 	elif tkd:
 		# potence d'un seul côté (virage) : un bras jusqu'au-delà du brin porté
 		_bras_treillis_tkd(h + (dy_retour if cote == -1 else 0.0), x_loin + signf(x_loin - x_fut) * 0.25, xs)
@@ -1083,9 +1128,9 @@ func _construire_teleski() -> void:
 			# font le câble qui arrive et celui qui repart (retour d'utilisateur du 16/11/2026 : « les angles des
 			# câbles sur les poulies ne sont pas physiquement corrects »)
 			if dirs_cable.has(montee):
-				_poulie_tkd_dans_le_plan(Vector3(x, yc2, 0), dirs_cable[montee][0], dirs_cable[montee][1], h + dyb - BRAS_TKD)
+				_poulie_tkd_dans_le_plan(Vector3(x, yc2, 0), dirs_cable[montee][0], dirs_cable[montee][1], h + dyb - BRAS_TKD, montee)
 			else:
-				_grande_poulie_tkd(Vector3(x, yc2, 0), tilt, h + dyb - BRAS_TKD)
+				_grande_poulie_tkd(Vector3(x, yc2, 0), tilt, h + dyb - BRAS_TKD, montee)
 			continue
 		# hauteur du câble le long du train (z > 0 vers l'aval) : droit de part et d'autre du pylône, selon le câble
 		# qui arrive et celui qui repart (LigneRemontee : dirs_cable)
