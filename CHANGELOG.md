@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Prochaine version
+## 1.80.0 — 27 novembre 2026
 
 - **Câble qui ondule sous la cabine (PWA)** (retour d'utilisateur, vidéo iPad du 27/11/2026 au Vallon de l'Iseran) : le
   câble montait et descendait de quelques millimètres sous la pince, une dent toutes les 0,42 s à 25 km/h — un
