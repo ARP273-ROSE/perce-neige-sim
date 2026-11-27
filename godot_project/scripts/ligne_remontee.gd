@@ -5423,7 +5423,16 @@ func _poser_pylones_teleski() -> void:
 			py.name = "P%d%s" % [i + 1, "" if cote == 0 else ("m" if cote == 1 else "d")]
 			_enfant(py)
 			py.construire()
-			MeshMerge.merge(py, [], "Pylone", false, _garder_pylones())
+			# roues et galets qui tournent hors de la fusion (retour du 27/11/2026 : « aucune poulie de TKD ne
+			# tourne » — fusionnées avec le pylône, elles restaient figées et leurs nœuds tournaient à vide)
+			var tournants: Array = []
+			for pq in py._poulies_tkd:
+				tournants.append(pq[0])
+			for g in py._galets_tk:
+				tournants.append(g[2])
+			MeshMerge.merge(py, tournants, "Pylone", false, _garder_pylones())
+			for pq in py._poulies_tkd:
+				MeshMerge.merge(pq[0], [], "Roue")
 			_pyl.append([py, d])
 		await _pause("pylônes téléski")
 	# (pas de batterie de nez : au téléski, le câble va droit de la poulie
@@ -7450,22 +7459,55 @@ func _portee_de(d: float) -> int:
 ## _pas_ligne m, 3 m en ligne) et la carte graphique trace un segment droit entre eux ; la pince posée sur la
 ## flèche exacte passait jusqu'à P/H × 3/4 m sous ce segment puis le rejoignait au sommet suivant — le câble
 ## semblait monter et descendre dans la pince immobile (retour d'utilisateur du 19/11/2026, PWA).
-var _d_sommets: Array = []            # [montée, descente] : abscisses des sommets du câble, croissantes
+var _d_sommets: Array = []            # [montée, descente] : [d, y, pente, demi-pas] des sommets, d croissantes
 
+## Depuis le 24/11 le nuanceur fait GLISSER le sommet le plus proche (à moins d'un demi-pas) jusque sous chaque
+## charge (accrocher) : la pointe dessinée est alors à la flèche exacte, sur la base prolongée par la pente du sommet.
+## La pince posée sur le segment entre sommets fixes (règle du 19/11) se décalait de cette pointe en dents de scie,
+## une dent tous les 3 m (vidéo PWA du 27/11 : « l'oscillation verticale du câble »).
 func _fleche_affichee(d: float, montee: bool) -> float:
 	if _d_sommets.is_empty():
 		var xm: float = signf(_x_brin(true))
 		var a: Array = [[], []]
 		for q in _boucle:
 			if absf(q.x) > 0.01:
-				(a[0 if signf(q.x) == xm else 1] as Array).append(-q.z)
+				(a[0 if signf(q.x) == xm else 1] as Array).append(q)
 		for k in range(2):
-			(a[k] as Array).sort()
-		_d_sommets = [PackedFloat32Array(a[0]), PackedFloat32Array(a[1])]
-	var t: PackedFloat32Array = _d_sommets[0 if montee else 1]
+			var l: Array = a[k]
+			l.sort_custom(func(u, v): return -u.z < -v.z)
+			var t := PackedFloat32Array()
+			var y := PackedFloat32Array()
+			var pe := PackedFloat32Array()
+			var h := PackedFloat32Array()
+			for i in range(l.size()):
+				var q: Vector3 = l[i]
+				t.append(-q.z)
+				y.append(q.y)
+				var ip: int = maxi(i - 1, 0)
+				var isu: int = mini(i + 1, l.size() - 1)
+				var dz: float = -(l[isu] as Vector3).z + (l[ip] as Vector3).z
+				var hh: float = 0.0
+				var pp: float = 0.0
+				if ip != i and isu != i and absf(dz) >= 0.05 and absf((l[isu] as Vector3).x - (l[ip] as Vector3).x) <= 0.2 * absf(dz):
+					hh = 0.5 * minf(absf(q.z - (l[ip] as Vector3).z), absf((l[isu] as Vector3).z - q.z))
+					pp = ((l[isu] as Vector3).y - (l[ip] as Vector3).y) / dz
+				pe.append(pp)
+				h.append(hh)
+			a[k] = [t, y, pe, h]
+		_d_sommets = a
+	var e: Array = _d_sommets[0 if montee else 1]
+	var t: PackedFloat32Array = e[0]
 	var j: int = t.bsearch(d)
 	if j <= 0 or j >= t.size() or t[j] - t[j - 1] < 1e-4:
 		return _fleche(d, montee)
+	var jp: int = j if absf(t[j] - d) < absf(d - t[j - 1]) else j - 1
+	var hj: float = (e[3] as PackedFloat32Array)[jp]
+	if hj > 0.0 and absf(t[jp] - d) < hj:
+		# sommet accroché sous la charge : y dessiné = y_sommet + pente × (d − d_sommet) − flèche(d)
+		var yd: float = (e[1] as PackedFloat32Array)[jp] + (e[2] as PackedFloat32Array)[jp] * (d - t[jp]) - _fleche(d, montee)
+		# (la pince part de point(s), interpolé LINÉAIREMENT entre les sommets de la boucle)
+		var ys: PackedFloat32Array = e[1]
+		return lerpf(ys[j - 1], ys[j], (d - t[j - 1]) / (t[j] - t[j - 1])) - yd
 	return lerpf(_fleche(t[j - 1], montee), _fleche(t[j], montee), (d - t[j - 1]) / (t[j] - t[j - 1]))
 
 
@@ -7975,7 +8017,7 @@ func _roues_proches(delta: float) -> void:
 			var pres: bool = Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() < ROUES_JUSQUA
 			if py._paires[true].is_empty():
 				# (TKD : leurs poulies tournent sans rien à reconstruire)
-				if py._poulies_tkd.is_empty() or pres == _roues_vues.has(py):
+				if (py._poulies_tkd.is_empty() and py._galets_tk.is_empty()) or pres == _roues_vues.has(py):
 					continue
 				if pres:
 					_roues_vues.append(py)
@@ -8038,6 +8080,51 @@ func point_porteur(s: float) -> Vector3:
 	return p
 
 
+## TKD : guides des grandes poulies de pylône (PyloneRemontee._monture_poulie_tkd) : deux lisses jaunes, côté
+## extérieur de la boucle, à GUIDE_TKD_Y sous le câble, qui s'écartent de la jante de GUIDE_TKD_X0 (à ±GUIDE_TKD_L
+## du pylône) à GUIDE_TKD_X1 (au droit de la roue). L'attache tourne autour du câble juste assez pour que son levier
+## (à TKD_X_ATTACHE du câble) passe dehors avec un jeu de 2,5 cm.
+const GUIDE_TKD_L: float = 1.3
+const GUIDE_TKD_X0: float = 0.06
+const GUIDE_TKD_X1: float = 0.20
+const GUIDE_TKD_Y: Array = [0.22, 0.42]
+var _d_guides: Array = []          # [montée, descente] : abscisses des pylônes à grande poulie
+
+
+static func x_guide_tkd(dz: float) -> float:
+	var w: float = 1.0 - smoothstep(PyloneRemontee.R_POULIE_PYL_TKD + 0.12, GUIDE_TKD_L, absf(dz))
+	return lerpf(GUIDE_TKD_X0, GUIDE_TKD_X1, w)
+
+
+func ecart_guides_tkd(d: float, montee: bool) -> float:
+	if _pyl.is_empty():
+		return 0.0
+	# (calculée une fois les pylônes posés : les perches sont placées avant)
+	if _d_guides.size() != 3 or int(_d_guides[2]) != _pyl.size():
+		_d_guides = [[], [], _pyl.size()]
+		for e in _pyl:
+			var py: PyloneRemontee = e[0]
+			if not py.tkd:
+				continue
+			for brin in [true, false]:
+				if (py.cote == 0 or brin == (py.cote == 1)) and py._poulie_tkd_porteuse(brin):
+					(_d_guides[0 if brin else 1] as Array).append(float(e[1]))
+	var best: float = INF
+	for dg in _d_guides[0 if montee else 1]:
+		if absf(d - dg) < absf(best):
+			best = d - dg
+	if absf(best) >= GUIDE_TKD_L:
+		return 0.0
+	var gx: float = x_guide_tkd(best) + 0.025
+	# levier : point (x0, −h) tourné de θ autour du câble → x = x0 cos θ + h sin θ ; θ le plus petit qui passe
+	var x0: float = VehiculeRemontee.TKD_X_ATTACHE
+	var h: float = float(GUIDE_TKD_Y[0])
+	if x0 >= gx:
+		return 0.0
+	var rr: float = sqrt(x0 * x0 + h * h)
+	return clampf(asin(clampf(gx / rr, -1.0, 1.0)) - atan2(x0, h), 0.0, 1.2)
+
+
 func _placer(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
@@ -8079,6 +8166,9 @@ func _placer(i: int) -> void:
 	if au_rail:
 		pt[0] = TeleskiGare.new(self).rail_local(s) + Vector3(0, 0.10, 0)
 	v.transform = Transform3D(bv, pt[0])
+	if famille == "perche_debrayable":
+		v.ecarter_tkd(ecart_guides_tkd(-(pt[0] as Vector3).z, signf((pt[0] as Vector3).x) == signf(_x_brin(true))) \
+			if z[0] == "ligne" and not au_rail else 0.0)
 	# la pince suit la pente du câble ; la partie suspendue balance
 	var d3: Vector3 = pt[1]
 	v.inclinaison(atan2(d3.y, Vector2(d3.x, d3.z).length()))

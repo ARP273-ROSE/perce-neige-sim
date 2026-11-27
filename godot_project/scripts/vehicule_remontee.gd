@@ -158,9 +158,10 @@ func constructeur() -> String:
 const VARIANTES: int = 8
 static var _numeros: Dictionary = {}      # type → numéros des variantes
 static var _modeles: Dictionary = {}      # type|numéro → [Node3D hors arbre, références, valeurs]
-const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras", "_assiette"]
+const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras", "_assiette",
+	"_ressort_tkd", "_bas_tkd", "_attache_tkd"]
 const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges", "_coulisses", "_demi_chariots", "_paires_tph"]
-const VALEURS: Array = ["places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
+const VALEURS: Array = ["ecart_tkd", "places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
 
 
 ## Modèles libérés en quittant le jeu.
@@ -386,6 +387,9 @@ func _a_garder() -> Array:
 		garder.append(c)
 	if _assiette != null:
 		garder.append(_assiette)
+	for n2 in [_ressort_tkd, _bas_tkd, _attache_tkd]:
+		if n2 != null:
+			garder.append(n2)
 	return garder
 
 
@@ -2750,53 +2754,7 @@ var _perche_tige: Node3D
 ## rigide télescopique à assiette.
 func _perche() -> void:
 	if famille == "perche_debrayable":
-		# Attache Poma (brevet US 4 154 171, photo Commons « Poma cable grip ») : une DOUILLE enfilée sur le
-		# câble (manchon de ~7 cm, profil intérieur en V renversé), sans mâchoires ni ressort ; sous la traction
-		# de la perche elle pivote et se coince sur le câble. Un levier en lame cintrée part de la douille vers
-		# l'arrière et le bas jusqu'à l'articulation de la perche. Perche : tube gris, boîtier noir du ressort
-		# freiné, partie télescopique, assiette noire de ~20 cm (photos du Chardonnet).
-		RemonteeKit.cylindre(self, 0.032, 0.032, 0.075, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), "galva", 12)
-		RemonteeKit.cylindre(self, 0.036, 0.036, 0.012, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0, -0.04)), "acier", 12)
-		RemonteeKit.cylindre(self, 0.036, 0.036, 0.012, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0, 0.04)), "acier", 12)
-		var lame: PackedVector3Array = PackedVector3Array([Vector3(0, -0.025, 0.02), Vector3(0, -0.07, 0.07),
-			Vector3(0, -0.14, 0.10), Vector3(0, -0.21, 0.10)])
-		RemonteeKit.tube(self, lame, 0.012, "acier", 6)
-		RemonteeKit.cylindre(self, 0.018, 0.018, 0.06, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.22, 0.10)), "acier_noir", 8)
-		_bras = Node3D.new()
-		_bras.name = "Bras"
-		_bras.position = Vector3(0, -0.22, 0.10)
-		add_child(_bras)
-		_perche_tige = Node3D.new()
-		_perche_tige.name = "Perche"
-		_bras.add_child(_perche_tige)
-		# partie fixe : tube gris et boîtier noir du ressort freiné, de taille constante
-		RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -TKD_TUBE, 0), 0.020, "galva", 8)
-		RemonteeKit.cylindre(_perche_tige, 0.030, 0.030, TKD_BOITIER, Transform3D(Basis.IDENTITY,
-			Vector3(0, -TKD_TUBE - TKD_BOITIER * 0.5, 0)), "noir_mat", 10)
-		# partie télescopique : éléments emboîtés qui coulissent hors du boîtier, puis les uns hors des autres ;
-		# la tige du bout porte l'embout et l'assiette, de taille constante
-		_coulisses.clear()
-		var parent: Node3D = _perche_tige
-		var n: int = nb_coulisses_tkd()
-		for k in range(n):
-			var c := Node3D.new()
-			c.name = "Coulisse%d" % (k + 1)
-			parent.add_child(c)
-			var r: float = 0.017 - 0.0015 * float(k) if k < n - 1 else 0.016 - 0.0015 * float(maxi(k - 1, 0))
-			RemonteeKit.barre(c, Vector3(0, 0, 0), Vector3(0, -TKD_ELEMENT, 0), maxf(r, 0.008), "galva", 8)
-			if k < n - 1:
-				# bague noire au bout de chaque élément (butée)
-				RemonteeKit.cylindre(c, maxf(r, 0.008) + 0.004, maxf(r, 0.008) + 0.004, 0.05, Transform3D(Basis.IDENTITY,
-					Vector3(0, -TKD_ELEMENT + 0.025, 0)), "noir_mat", 8)
-			_coulisses.append(c)
-			parent = c
-		_assiette = Node3D.new()
-		_assiette.name = "Assiette"
-		parent.add_child(_assiette)
-		_assiette.position = Vector3(0, -TKD_ELEMENT, 0)
-		RemonteeKit.cylindre(_assiette, 0.022, 0.022, 0.10, Transform3D(Basis.IDENTITY, Vector3(0, 0.02, 0)), "noir_mat", 8)
-		RemonteeKit.cylindre(_assiette, 0.10, 0.09, 0.045, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.05, 0)), "noir_mat", 18)
-		_telescoper(TKD_REPOS)
+		_suspente_tkd()
 		return
 	# enrouleur : pince fixe sur le câble, étrier en C qui le contourne par
 	# l'extérieur (photo Commons « Tellerliftbügel »), boîtier à tambour
@@ -2837,6 +2795,133 @@ func _perche() -> void:
 	deroule(0.0)
 
 
+## Suspente Poma de TKD (retour d'utilisateur du 27/11/2026 : « reprends le design complet d'une perche : le système
+## d'accroche sur le câble fait un beau truc, ensuite c'est un ressort, ensuite une perche télescopique pour s'adapter
+## au terrain ») d'après la documentation Poma reprise par remontees-mecaniques.net (« le téléski à perches
+## découplables », vue éclatée de l'attache et coupe du ressort freiné) — quatre éléments, de haut en bas :
+##   1. l'ATTACHE débrayable : une DOUILLE enfilée sur le câble (alésage, bagues aux bouts), son SUPPORT qui part
+##      vers l'extérieur de la boucle (côté où les guides des pylônes écartent la perche), le TÉTON (goujon) que les
+##      rails de gare prennent pour débrayer, le LEVIER plat ajouré qui pend du support — sous la traction de la
+##      perche il fait arc-bouter la douille sur le câble — et trois ANNEAUX en chaîne (souplesse) ;
+##   2. le RESSORT FREINÉ : ressort hélicoïdal apparent, embouts en haut (goupille) et en bas (chape), deux tringles
+##      et le frein en caoutchouc à mi-hauteur dedans ; il encaisse l'à-coup quand la canne est tirée à fond ;
+##   3. la CANNE TÉLESCOPIQUE (amortisseur pneumatique) : tube gris, coulissant(s) qui en sortent, bout cintré ;
+##   4. la SELLETTE (assiette) noire au bout.
+const TKD_ATTACHE: float = 0.45                 # de l'axe du câble à l'articulation sous les anneaux
+const TKD_X_ATTACHE: float = 0.10               # support de douille : décalage vers l'extérieur de la boucle (X+)
+const TKD_RESSORT_ETIRE: float = 0.22           # allongement maxi du ressort freiné (butée des tringles)
+var _ressort_tkd: Node3D = null                 # spires du ressort (étirées en y)
+var _bas_tkd: Node3D = null                     # embout bas, canne et coulissants (descendent avec le ressort)
+var _attache_tkd: Node3D = null                 # douille, support, levier, anneaux : pivotent autour du câble
+var ecart_tkd: float = 0.0
+
+
+## Guides des pylônes (retour du 27/11/2026 : « les guides sont là pour écarter la perche de la poulie, pour
+## l'instant elle les traverse ») : l'attache tourne autour du câble de `theta` (rad, vers l'extérieur X+) ;
+## l'articulation de la perche suit, la perche reste dirigée vers le skieur (tendre_perche).
+func ecarter_tkd(theta: float) -> void:
+	if _attache_tkd == null or is_equal_approx(theta, ecart_tkd):
+		return
+	ecart_tkd = theta
+	var r: Basis = Basis(Vector3.BACK, theta)
+	_attache_tkd.basis = r
+	_bras.position = r * Vector3(TKD_X_ATTACHE, -TKD_ATTACHE, 0.02)
+
+
+func _suspente_tkd() -> void:
+	var axe_z: Basis = Basis(Vector3.RIGHT, PI * 0.5)
+	# (l'attache entière pivote autour du câble quand les guides des pylônes l'écartent : ecarter_tkd)
+	var att: Node3D = Node3D.new()
+	att.name = "Attache"
+	add_child(att)
+	_attache_tkd = att
+	# 1. douille : manchon sur le câble, bagues aux bouts, deux goupilles élastiques
+	RemonteeKit.cylindre(att, 0.030, 0.030, 0.11, Transform3D(axe_z, Vector3.ZERO), "galva", 12)
+	for zb in [-0.05, 0.05]:
+		RemonteeKit.cylindre(att, 0.036, 0.036, 0.014, Transform3D(axe_z, Vector3(0, 0, zb)), "acier", 12)
+	for zg in [-0.025, 0.025]:
+		RemonteeKit.cylindre(att, 0.005, 0.005, 0.075, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, zg)), "acier_noir", 6)
+	# support de douille : bras moulé vers l'extérieur et le bas, téton au bout (pris par les rails de gare)
+	var xs: float = TKD_X_ATTACHE
+	RemonteeKit.barre(att, Vector3(0.02, -0.01, 0), Vector3(xs - 0.01, -0.035, 0), 0.016, "galva", 8)
+	RemonteeKit.boite_en(att, Vector3(0.05, 0.06, 0.09), Vector3(xs, -0.05, 0), "galva")
+	RemonteeKit.cylindre(att, 0.012, 0.012, 0.06, Transform3D(axe_z, Vector3(xs, -0.035, -0.07)), "acier", 8)
+	RemonteeKit.cylindre(att, 0.017, 0.017, 0.012, Transform3D(axe_z, Vector3(xs, -0.035, -0.10)), "acier", 8)
+	# levier plat ajouré (deux flasques et la lumière entre elles), un peu en arrière vers le skieur
+	var y_l0: float = -0.08
+	var y_l1: float = -0.31
+	for dz in [-0.017, 0.017]:
+		RemonteeKit.boite_en(att, Vector3(0.012, y_l0 - y_l1, 0.012), Vector3(xs, (y_l0 + y_l1) * 0.5, 0.02 + dz), "galva")
+	RemonteeKit.boite_en(att, Vector3(0.014, 0.03, 0.05), Vector3(xs, y_l1 - 0.01, 0.02), "galva")
+	# trois anneaux en chaîne, alternés
+	var y_a: float = y_l1 - 0.035
+	for k in range(3):
+		var u: Vector3 = Vector3.BACK if k % 2 == 0 else Vector3.RIGHT
+		RemonteeKit.tube(att, RemonteeKit.arc(Vector3(xs, y_a - 0.028, 0.02), u, Vector3.UP, 0.028, 0.0, TAU, 12), 0.006, "acier", 5)
+		y_a -= 0.042
+	_bras = Node3D.new()
+	_bras.name = "Bras"
+	_bras.position = Vector3(xs, -TKD_ATTACHE, 0.02)
+	add_child(_bras)
+	_perche_tige = Node3D.new()
+	_perche_tige.name = "Perche"
+	_bras.add_child(_perche_tige)
+	# 2. ressort freiné : embout haut (goupille), spires noires apparentes, tringles et frein caoutchouc dedans
+	RemonteeKit.cylindre(_perche_tige, 0.016, 0.016, 0.07, Transform3D(Basis.IDENTITY, Vector3(0, -0.035, 0)), "galva", 8)
+	RemonteeKit.cylindre(_perche_tige, 0.006, 0.006, 0.05, Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(0, -0.02, 0)), "acier_noir", 6)
+	var l_sp: float = TKD_BOITIER - 0.14
+	_ressort_tkd = Node3D.new()
+	_ressort_tkd.name = "RessortFreine"
+	_ressort_tkd.position = Vector3(0, -0.07, 0)
+	_perche_tige.add_child(_ressort_tkd)
+	var pts: PackedVector3Array = PackedVector3Array()
+	var spires: int = 18
+	for i in range(spires * 8 + 1):
+		var t: float = float(i) / float(spires * 8)
+		var ang: float = TAU * spires * t
+		pts.append(Vector3(cos(ang) * 0.027, -l_sp * t, sin(ang) * 0.027))
+	RemonteeKit.tube(_ressort_tkd, pts, 0.0055, "acier_noir", 4)
+	for dx in [-0.012, 0.012]:
+		RemonteeKit.barre(_ressort_tkd, Vector3(dx, 0, 0), Vector3(dx, -l_sp, 0), 0.0035, "galva", 4)
+	RemonteeKit.cylindre(_ressort_tkd, 0.019, 0.019, 0.10, Transform3D(Basis.IDENTITY, Vector3(0, -l_sp * 0.5, 0)), "caoutchouc", 8)
+	_bas_tkd = Node3D.new()
+	_bas_tkd.name = "BasPerche"
+	_perche_tige.add_child(_bas_tkd)
+	# embout bas en chape, axe et goupille fendue
+	RemonteeKit.cylindre(_bas_tkd, 0.016, 0.016, 0.07, Transform3D(Basis.IDENTITY, Vector3(0, -TKD_BOITIER + 0.035, 0)), "galva", 8)
+	RemonteeKit.cylindre(_bas_tkd, 0.007, 0.007, 0.05, Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(0, -TKD_BOITIER + 0.012, 0)), "acier", 6)
+	# 3. canne télescopique : tube gris de taille constante, puis les coulissants
+	RemonteeKit.barre(_bas_tkd, Vector3(0, -TKD_BOITIER, 0), Vector3(0, -TKD_FIXE, 0), 0.021, "galva", 8)
+	RemonteeKit.cylindre(_bas_tkd, 0.026, 0.026, 0.06, Transform3D(Basis.IDENTITY, Vector3(0, -TKD_FIXE + 0.03, 0)), "noir_mat", 8)
+	_coulisses.clear()
+	var parent: Node3D = _bas_tkd
+	var n: int = nb_coulisses_tkd()
+	for k in range(n):
+		var c := Node3D.new()
+		c.name = "Coulisse%d" % (k + 1)
+		parent.add_child(c)
+		var r: float = maxf(0.016 - 0.0015 * float(k), 0.008)
+		RemonteeKit.barre(c, Vector3(0, 0, 0), Vector3(0, -TKD_ELEMENT, 0), r, "galva", 8)
+		if k < n - 1:
+			RemonteeKit.cylindre(c, r + 0.004, r + 0.004, 0.05, Transform3D(Basis.IDENTITY,
+				Vector3(0, -TKD_ELEMENT + 0.025, 0)), "noir_mat", 8)
+		_coulisses.append(c)
+		parent = c
+	# 4. bout cintré vers le skieur (+Z, derrière la pince) et sellette noire
+	_assiette = Node3D.new()
+	_assiette.name = "Assiette"
+	parent.add_child(_assiette)
+	_assiette.position = Vector3(0, -TKD_ELEMENT, 0)
+	var cint: PackedVector3Array = PackedVector3Array()
+	for k2 in range(7):
+		var a2: float = float(k2) / 6.0 * deg_to_rad(35.0)
+		cint.append(Vector3(0, 0.22 - sin(a2) * 0.30, (1.0 - cos(a2)) * 0.30))
+	RemonteeKit.tube(_assiette, cint, 0.014, "galva", 6)
+	var bout: Vector3 = cint[cint.size() - 1]
+	RemonteeKit.cylindre(_assiette, 0.10, 0.085, 0.05, Transform3D(Basis(Vector3.RIGHT, deg_to_rad(35.0)), bout + Vector3(0, -0.02, 0.01)), "noir_mat", 18)
+	_telescoper(TKD_REPOS)
+
+
 ## Enrouleur : 0 = corde rentrée (perche contre le boîtier), 1 = déroulée
 ## (skieur tracté, perche ~4 m sous le câble).
 ## Perche tirée jusqu'à `d` m sous la pince (rondelle ou barre au niveau
@@ -2868,7 +2953,7 @@ func deroule(t: float) -> void:
 const TKD_TUBE: float = 1.30
 const TKD_BOITIER: float = 0.80
 const TKD_FIXE: float = TKD_TUBE + TKD_BOITIER
-const TKD_REPOS: float = 3.25
+const TKD_REPOS: float = 3.02                    # (articulation 0,45 m sous le câble : assiette au repos où elle était)
 const TKD_ELEMENT: float = 3.20
 const TKD_RECOUVREMENT: float = 0.30
 var _coulisses: Array = []                 # éléments emboîtés, du boîtier vers l'assiette (copiés : LISTES)
@@ -2885,8 +2970,14 @@ static func nb_coulisses_tkd() -> int:
 func _telescoper(l: float) -> void:
 	if _coulisses.is_empty():
 		return
-	l = clampf(l, TKD_REPOS, 3.25 * PERCHE_TKD_MAX)
-	longueur_tkd = l
+	# au-delà de la canne tirée à fond, le ressort freiné s'étire (jusqu'à la butée de ses tringles)
+	var lmax: float = 3.25 * PERCHE_TKD_MAX
+	var etire: float = clampf(l - lmax, 0.0, TKD_RESSORT_ETIRE)
+	if _ressort_tkd != null:
+		_ressort_tkd.scale = Vector3(1, 1.0 + etire / (TKD_BOITIER - 0.14), 1)
+		_bas_tkd.position = Vector3(0, -etire, 0)
+	l = clampf(l, TKD_REPOS, lmax)
+	longueur_tkd = l + etire
 	var e_tot: float = l - TKD_FIXE
 	var e_max: float = TKD_ELEMENT - TKD_RECOUVREMENT
 	# (la tige du bout sort d'abord, puis l'élément qui la porte, etc.)
@@ -2921,13 +3012,15 @@ func tendre_perche(cible: Vector3) -> void:
 	var dist: float = v.length()
 	if dist < 0.1:
 		return
-	_bras.rotation = Vector3(-atan2(v.z, -v.y), 0.0, 0.0)
 	if famille == "perche_debrayable":
+		# (visée en 3D : l'articulation s'écarte au passage des guides de pylône, la perche reste vers le skieur)
+		_bras.basis = Basis(Quaternion(Vector3.DOWN, v / dist))
 		_telescoper(dist)
-	else:
-		var l: float = clampf(dist - 1.15, 0.25, 6.0)
-		_corde.scale = Vector3(1, l, 1)
-		_perche_tige.position = Vector3(0, -l, 0)
+		return
+	_bras.rotation = Vector3(-atan2(v.z, -v.y), 0.0, 0.0)
+	var l: float = clampf(dist - 1.15, 0.25, 6.0)
+	_corde.scale = Vector3(1, l, 1)
+	_perche_tige.position = Vector3(0, -l, 0)
 
 
 # --- grandes cabines : 3S et téléphérique -----------------------------------------

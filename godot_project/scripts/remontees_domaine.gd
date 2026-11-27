@@ -1808,9 +1808,8 @@ func _attendre_perche() -> void:
 	skieur._v_ski = Vector3.ZERO
 	var f: Vector3 = lg.global_transform.basis * Vector3(0, 0, -1)
 	var cap: float = atan2(-f.x, -f.z)
-	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
+	skieur.poser_skis_au_sol(cap, dt)
 	skieur._cap = cap
-	skieur._cap_ski = cap
 	var en_place: bool = Vector2(p.x - q.x, p.z - q.z).length() < 0.3
 	if en_place:
 		# une seule demande par skieur (retour d'utilisateur du 16/11/2026 : « à chaque fois tu me fais partir une
@@ -1941,7 +1940,7 @@ func _suivre_perche() -> void:
 	skieur.dernier_sol = pos
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v)
-	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
+	skieur.poser_skis_au_sol(cap, get_process_delta_time())
 	skieur._cap = cap
 	# archet sous les fesses, rondelle entre les jambes
 	# (l'archet reste au milieu des deux places : le manche ne suit pas le skieur sur le côté)
@@ -2181,6 +2180,7 @@ func _descendre_corde(delta: float) -> void:
 	skieur.corde_lacet = float(_corde["cap"]) + pend.psi
 	var axe_n: Vector3 = (haut - p).normalized() if (haut - p).length() > 0.3 else Vector3.UP
 	skieur._visuel.basis = Basis(Quaternion(Vector3.UP, axe_n)) * Basis(Vector3.UP, skieur.corde_lacet)
+	skieur._skis.basis = Basis.IDENTITY
 	# brin porteur de l'ancrage (siège ou plancher de la cabine) à l'évacué, incliné quand il balance ; brin libre
 	# jusqu'au sol où le secouriste a jeté le sac à corde (retour d'utilisateur du 16/11/2026 : « la corde était 10
 	# fois trop courte pour atteindre le sol »)
@@ -2316,6 +2316,7 @@ func _suivre_siege() -> void:
 	# il balance avec le siège ou la cabine (assis bien droit, sa tête entrait dans la vitre)
 	var penche: Basis = v.balancement_monde()
 	skieur._visuel.basis = penche * Basis(Vector3.UP, cap)
+	skieur._skis.basis = Basis.IDENTITY
 	skieur._visuel.position = penche * (Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS) if skieur.assis else Vector3.ZERO
 	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège ;
 	# en cabine, seulement portes ouvertes (il était éjecté avant —

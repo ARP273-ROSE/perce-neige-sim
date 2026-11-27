@@ -496,6 +496,7 @@ func asseoir(cap: float, skis_aux_pieds: bool = false) -> void:
 		_skis.multimesh.mesh = _skis_pieds
 		_skis.position = Vector3(0.0, 0.0, -RECUL_ASSIS)
 	_visuel.rotation = Vector3(0.0, cap, 0.0)
+	_skis.basis = Basis.IDENTITY
 	_visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * RECUL_ASSIS
 
 
@@ -506,6 +507,7 @@ func lever() -> void:
 	_skis.visible = true
 	_visuel.position = Vector3(0.0, Y_SKI if chausse else 0.0, 0.0)
 	_visuel.rotation = Vector3.ZERO
+	_skis.basis = Basis.IDENTITY
 	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
 	if chausse:
 		_apparence_ski()
@@ -526,6 +528,7 @@ func _apparence_ski() -> void:
 	_skis.position = Vector3.ZERO if chausse else SkieurMesh.ANCRE_SKIS
 	_batons.visible = chausse
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+	_skis.basis = Basis.IDENTITY
 	_visuel.position.y = Y_SKI if chausse else 0.0
 
 
@@ -628,12 +631,14 @@ func _chuter() -> void:
 	_chute_t = CHUTE_S
 	_apparence_ski()
 	_visuel.rotation = Vector3(-1.35, _cap, 0.25)
+	_skis.basis = Basis.IDENTITY
 	_visuel.position.y = 0.30
 	chute.emit()
 
 
 func _relever() -> void:
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+	_skis.basis = Basis.IDENTITY
 	_visuel.position.y = 0.0
 
 
@@ -748,6 +753,7 @@ func prendre_echelle(py) -> void:    # PyloneRemontee ou PyloneTreillis (même c
 	velocity = Vector3.ZERO
 	_cap = atan2(n.x, n.z)
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+	_skis.basis = Basis.IDENTITY
 
 
 ## GRIMPER / DESCENDRE sur l'échelle : repart dans l'autre sens.
@@ -1579,17 +1585,39 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	_v_ski = v
 	velocity = v
 	_cap = _cap_ski
-	# skis posés sur la pente (retour d'utilisateur du 26/11/2026 : « le skieur garde ses skis horizontaux quel que
-	# soit le terrain ») : la normale du sol, lissée, incline tout le visuel — en plein dans le sens des skis, à moitié
-	# en travers (en traversée, les carres mordent et le corps reste plus droit que la pente)
-	_n_vis = _n_vis.lerp(n2, minf(1.0, delta * 8.0)).normalized()
-	var droite: Vector3 = Basis(Vector3.UP, _cap_ski) * Vector3.RIGHT
-	var nv: Vector3 = (_n_vis - droite * _n_vis.dot(droite) * 0.5).normalized()
-	if nv.y < cos(deg_to_rad(40.0)):
-		nv = Vector3(nv.x, 0.0, nv.z).normalized() * sin(deg_to_rad(40.0)) + Vector3.UP * cos(deg_to_rad(40.0))
-	_visuel.basis = Basis(Quaternion(Vector3.UP, nv)) * Basis.from_euler(Vector3(0.0, _cap_ski, _penche))
+	poser_skis(n2, delta)
 	if not premiere_personne:
 		_visuel.visible = true          # (1re personne : _camera() décide, jambes et skis visibles)
+
+
+## Skis posés sur la pente (retours d'utilisateur du 26 et du 27/11/2026 : « les skis ne suivent pas la pente mais
+## restent horizontaux ; les chevilles devraient faire un truc ? ») : les skis prennent la normale du sol, lissée ;
+## le corps n'en prend qu'une part (il reste à peu près d'aplomb, comme un vrai skieur) et les chevilles fléchissent
+## pour le reste — les skis tournent sous les chaussures, autour de leur centre. `n` : normale du sol (monde).
+const PART_CORPS_PENTE: float = 0.3
+const CHEVILLE_MAX: float = deg_to_rad(35.0)
+
+func poser_skis(n: Vector3, delta: float) -> void:
+	_n_vis = _n_vis.lerp(n, minf(1.0, delta * 8.0)).normalized()
+	var nv: Vector3 = _n_vis
+	if nv.y < cos(deg_to_rad(50.0)):
+		nv = Vector3(nv.x, 0.0, nv.z).normalized() * sin(deg_to_rad(50.0)) + Vector3.UP * cos(deg_to_rad(50.0))
+	var nb: Vector3 = Vector3.UP.slerp(nv, PART_CORPS_PENTE).normalized()
+	_visuel.basis = Basis(Quaternion(Vector3.UP, nb)) * Basis.from_euler(Vector3(0.0, _cap_ski, _penche))
+	# (dans le repère du corps : la normale du sol, bornée à ce que la cheville et le genou permettent)
+	var nl: Vector3 = (_visuel.basis.inverse() * nv).normalized()
+	var a: float = Vector3.UP.angle_to(nl)
+	if a > CHEVILLE_MAX:
+		nl = Vector3.UP.slerp(nl, CHEVILLE_MAX / a).normalized()
+	_skis.basis = Basis(Quaternion(Vector3.UP, nl)) if a > 1e-4 else Basis.IDENTITY
+
+
+## Pose du skieur debout sur ses skis au sol en (sa position), cap `cap` : tiré par un téléski, en attente de perche.
+func poser_skis_au_sol(cap: float, delta: float) -> void:
+	_cap_ski = cap
+	_penche = 0.0
+	var p: Vector3 = global_position
+	poser_skis(_sol_ski(p.x, p.z, p.y)[1], delta)
 
 
 ## Sol sous les skis en (x, z) : [hauteur, normale]. Le relief, ou plus
@@ -1836,6 +1864,7 @@ func _animer(delta: float, dir: Vector3) -> void:
 		# (le cap à pied est celui de la vue ; à reculons il regarde devant lui)
 		_cap = cam_yaw
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+	_skis.basis = Basis.IDENTITY
 	var image: int = 0
 	if vitesse > 0.15 and is_on_floor():
 		var demi_avant: int = int(_phase / PI)

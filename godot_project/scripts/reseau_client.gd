@@ -272,6 +272,8 @@ func _ouvrir() -> void:
 		return
 	_voulu = true
 	_ws = WebSocketPeer.new()
+	_seau = SEAU_RAFALE - 1.0          # (le message d'entrée)
+	_seau_us = Time.get_ticks_usec()
 	_ws.outbound_buffer_size = 1 << 16
 	_ws.inbound_buffer_size = 1 << 16
 	_entree_envoyee = false
@@ -471,7 +473,7 @@ func _envoyer(delta: float) -> void:
 	if _t_horloge <= 0.0:
 		_t_horloge = 0.25 if _n_horloge < 8 else 5.0
 		_n_horloge += 1
-		_ws.send_text(JSON.stringify({"t": "horloge", "c": temps_local()}))
+		_envoyer_txt(JSON.stringify({"t": "horloge", "c": temps_local()}), false)
 	_t_etat -= delta
 	if _t_etat <= 0.0:
 		# (en descente à la corde, la position part à 10 Hz dans les messages « corde » : l'état seulement à 2 Hz, le
@@ -479,7 +481,7 @@ func _envoyer(delta: float) -> void:
 		_t_etat = 0.5 if not _ma_corde.is_empty() and int(_ma_corde["ph"]) == 1 else PERIODE_ETAT
 		var e: Dictionary = etat_local()
 		if not e.is_empty():
-			_ws.send_text(JSON.stringify(e))
+			_envoyer_txt(JSON.stringify(e), false)
 	_t_vu -= delta
 	if _t_vu <= 0.0:
 		_t_vu = 0.1
@@ -499,7 +501,7 @@ func _envoyer(delta: float) -> void:
 					if m * LIGNES_PAR_MESSAGE + k >= dl.size():
 						break
 					morceau.append(dl[(debut + m * LIGNES_PAR_MESSAGE + k) % dl.size()])
-				_ws.send_text(JSON.stringify({"t": "lignes", "tc": maintenant(), "d": morceau}))
+				_envoyer_txt(JSON.stringify({"t": "lignes", "tc": maintenant(), "d": morceau}), false)
 			_rotation += n_msg
 	_envoyer_corde(delta)
 	if hote_id == mon_id:
@@ -789,7 +791,7 @@ func _geste_ligne(lg: LigneRemontee, ordre: String = "", arg: Variant = null) ->
 	# la main n'est plus défait par l'état du pilote, et une ligne pas encore construite chez l'autre naît arrêtée)
 	if ordre in ORDRES and _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
 		var k: int = clampi(int(arg) if ordre == "cran" and arg != null else lg.cran, 0, 9)
-		_ws.send_text(JSON.stringify({"t": "cmd", "l": String(lg.name), "a": 2, "o": ordre, "k": k, "tc": maintenant()}))
+		_envoyer_txt(JSON.stringify({"t": "cmd", "l": String(lg.name), "a": 2, "o": ordre, "k": k, "tc": maintenant()}), true)
 
 
 ## Commande d'une remontée faite par un autre joueur : exécutée ici comme au poste (construite ou pas).
@@ -820,7 +822,7 @@ func _demander(n: String) -> void:
 		return
 	if pilote_de(n) != mon_id:
 		_prise[n] = temps_local()
-	_ws.send_text(JSON.stringify({"t": "cmd", "l": n, "a": 0}))
+	_envoyer_txt(JSON.stringify({"t": "cmd", "l": n, "a": 0}), true)
 
 
 ## (hôte) Demande de la main sur une remontée : accordée si le demandeur l'a déjà, ou si personne n'y a touché
@@ -859,7 +861,7 @@ func _publier_pilotes() -> void:
 		d.append([n, int(pilotes[n])])
 		if d.size() >= 24:
 			break
-	_ws.send_text(JSON.stringify({"t": "pilotes", "d": d}))
+	_envoyer_txt(JSON.stringify({"t": "pilotes", "d": d}), true)
 
 
 func _recevoir_pilotes(d: Array) -> void:
@@ -1172,8 +1174,39 @@ static func _proches(l1: String, s1: float, l2: String, s2: float) -> bool:
 
 
 func _envoyer_json(o: Dictionary) -> void:
-	if _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
-		_ws.send_text(JSON.stringify(o))
+	_envoyer_txt(JSON.stringify(o), true)
+
+
+## Débit vers le relais (retour du 27/11/2026, « corrige la descente à la corde ») : le relais coupe au-delà de
+## 20 messages par seconde (seau de jetons, rafale 30 : salons.py DEBIT_PAR_S, RAFALE). L'hôte en descente à la
+## corde en envoyait autant — corde à 10 Hz, état, remontées, file — et, sur une machine qui rattrape des images
+## en retard, davantage par seconde réelle : coupé, il revenait sous un autre identifiant, son voisin le croyait
+## parti et descendait en même temps. Même seau ici, sur l'horloge réelle, un peu en dessous : les messages
+## secondaires (position, état des remontées, horloge) cèdent la place quand il se vide, les autres gardent une
+## réserve.
+const SEAU_DEBIT: float = 17.0
+const SEAU_RAFALE: float = 26.0
+const SEAU_RESERVE: float = 8.0
+var _seau: float = SEAU_RAFALE
+var _seau_us: int = 0
+
+
+func _jeton(prio: bool) -> bool:
+	var now: int = Time.get_ticks_usec()
+	if _seau_us > 0:
+		_seau = minf(SEAU_RAFALE, _seau + float(now - _seau_us) * 1e-6 * SEAU_DEBIT)
+	_seau_us = now
+	if _seau < (1.0 if prio else SEAU_RESERVE):
+		return false
+	_seau -= 1.0
+	return true
+
+
+func _envoyer_txt(txt: String, prio: bool) -> void:
+	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	if _jeton(prio):
+		_ws.send_text(txt)
 
 
 func _nom_de(id: int) -> String:

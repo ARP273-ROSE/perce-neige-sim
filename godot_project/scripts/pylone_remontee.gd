@@ -795,10 +795,16 @@ func tourner_roues(dphi: float) -> void:
 	# poulies des TKD (retour d'utilisateur du 26/11/2026 : « les roues des pylônes des TKD ne tournent pas »)
 	var k: float = R_GALET / R_POULIE_PYL_TKD
 	for p in _poulies_tkd:
-		(p[0] as Node3D).rotate_object_local(Vector3.RIGHT, float(p[1]) * dphi * k)
+		if is_instance_valid(p[0]):
+			(p[0] as Node3D).rotate_object_local(Vector3.RIGHT, float(p[1]) * dphi * k)
+	# galets des trains de téléski (retour du 27/11/2026 : « aucune poulie de TKD ne tourne ») : axe = Y du maillage
+	for g in _galets_tk:
+		if is_instance_valid(g[0]):
+			(g[0] as Node3D).rotate_object_local(Vector3.UP, float(g[1]) * dphi)
 
 
 var _poulies_tkd: Array = []          # [roue, sens] des poulies de ligne d'un TKD
+var _galets_tk: Array = []            # [galet, sens × R_GALET / r] des trains de galets des téléskis
 
 
 ## Paires calées sur le câble TEL QU'IL EST AFFICHÉ (flèche sous les
@@ -997,20 +1003,24 @@ func _monture_poulie_tkd(n: Node3D, o: Vector3, y_bras: float, montee: bool = tr
 	RemonteeKit.cylindre(n, 0.035, 0.035, la, Transform3D(axe_x.basis, o + Vector3(si * (0.065 + la * 0.5), 0, 0)), "acier_noir", 10)
 	var xp: float = si * (0.065 + la)
 	RemonteeKit.boite_en(n, Vector3(0.03, 0.26, 0.24), o + Vector3(xp, 0.02, 0), "galva")
-	# guides de perche, côté extérieur : traverse sous la roue, deux montants, deux lisses cintrées vers l'extérieur
+	# guides de perche, côté extérieur (retour du 27/11/2026 : la perche les traversait) : traverse sous la roue,
+	# montants, deux lisses cintrées aux hauteurs du levier de l'attache, qui s'écartent de la jante vers le pylône ;
+	# l'attache pivote autour du câble pour passer dehors (LigneRemontee.ecart_guides_tkd)
 	var yt: float = o.y - R - 0.10
-	var xe: float = -si * 0.30
+	var xe: float = -si * LigneRemontee.GUIDE_TKD_X1
 	RemonteeKit.barre(n, Vector3(xp, o.y, 0), Vector3(xp, yt, 0), 0.025, "galva", 6)
 	RemonteeKit.barre(n, Vector3(xp, yt, 0), Vector3(xe, yt, 0), 0.025, "galva", 6)
+	var y_l: Array = []
+	for hy in LigneRemontee.GUIDE_TKD_Y:
+		y_l.append(-float(hy))
 	for zm in [-(R + 0.12), R + 0.12]:
 		RemonteeKit.barre(n, Vector3(xe, yt, 0), Vector3(xe, yt + 0.05, zm), 0.02, "galva", 5)
-		RemonteeKit.barre(n, Vector3(xe, yt + 0.05, zm), Vector3(xe, -0.12, zm), 0.02, "galva", 5)
-	for yl in [-0.12, o.y]:
+		RemonteeKit.barre(n, Vector3(xe, yt + 0.05, zm), Vector3(xe, float(y_l[0]), zm), 0.02, "galva", 5)
+	for yl in y_l:
 		var pts: PackedVector3Array = PackedVector3Array()
-		for k in range(13):
-			var z: float = lerpf(1.3, -1.3, k / 12.0)
-			var w: float = 1.0 - smoothstep(R + 0.12, 1.3, absf(z))
-			pts.append(Vector3(-si * lerpf(0.06, 0.30, w), yl, z))
+		for k in range(17):
+			var z: float = lerpf(LigneRemontee.GUIDE_TKD_L, -LigneRemontee.GUIDE_TKD_L, k / 16.0)
+			pts.append(Vector3(-si * LigneRemontee.x_guide_tkd(z), float(yl), z))
 		RemonteeKit.tube(n, pts, 0.018, "jaune_securite", 6)
 
 
@@ -1157,9 +1167,18 @@ func _construire_teleski() -> void:
 				# galet incliné sous le câble : le point d'appui reste sous lui, la normale penche vers l'extérieur
 				cg = Vector3(x, float(y_c.call(zk)), cg.z) - Vector3(-sin(tilt), cos(tilt), 0.0) * 0.14
 			RemonteeKit.galet(self, cg, 0.14, 0.06)
+			var gi: Node3D = get_child(get_child_count() - 1)
 			if tilt != 0.0:
-				var gi: Node3D = get_child(get_child_count() - 1)
 				gi.transform.basis = Basis(Vector3.BACK, tilt) * gi.transform.basis
+			# sous le câble, le haut du galet file avec lui (vers −Z au brin montant) : rotation négative autour de +X
+			var sg: float = (1.0 if String(genres[k]) == "C" else -1.0) * (1.0 if montee else -1.0)
+			# (dans un nœud porteur : la fusion du pylône, en C++, ne laisse de côté que des nœuds, pas un maillage seul)
+			var porteur: Node3D = Node3D.new()
+			porteur.name = "GaletTk"
+			add_child(porteur)
+			remove_child(gi)
+			porteur.add_child(gi)
+			_galets_tk.append([gi, sg * R_GALET / 0.14, porteur])
 		# flasques du train (penchées comme le câble) et suspente côté intérieur, jusqu'au bras
 		var xi: float = x - signf(x - x_fut) * 0.12 if absf(x - x_fut) > 0.01 else x + 0.12
 		var pente_t: float = atan(0.5 * (q_av + q_am))

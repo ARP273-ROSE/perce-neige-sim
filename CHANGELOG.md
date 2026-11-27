@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version
+
+- **Câble qui ondule sous la cabine (PWA)** (retour d'utilisateur, vidéo iPad du 27/11/2026 au Vallon de l'Iseran) : le
+  câble montait et descendait de quelques millimètres sous la pince, une dent toutes les 0,42 s à 25 km/h — un
+  sommet du câble tous les 3 m. Deux corrections se contredisaient : depuis le 24/11, le nuanceur fait glisser le
+  sommet le plus proche jusque sous chaque véhicule (pointe de la flèche à sa place exacte), mais la pince restait
+  posée sur le segment entre deux sommets fixes (règle du 19/11). La pince suit maintenant la pointe dessinée :
+  base du sommet glissé prolongée par sa pente, moins la flèche.
+- **Descente à la corde en réseau** : l'hôte en descente envoyait jusqu'à 20 messages par seconde (corde à 10 Hz,
+  état, remontées, file) ; sur une machine qui rattrape des images, davantage par seconde réelle, et le relais le
+  coupait. Revenu sous un autre identifiant, il disparaissait pour son voisin, qui descendait en même temps que lui.
+  Le jeu tient désormais le même compte que le relais, sur l'horloge réelle, un peu en dessous : la position et
+  l'état des remontées cèdent la place, les messages de la corde, des commandes et de la file gardent une réserve.
+- **Skis sur la pente, chevilles fléchies** (retour d'utilisateur du 27/11/2026 : « les skis ne suivent pas la pente,
+  les chevilles devraient faire un truc ? ») : les skis prennent la pente du sol (jusqu'à 35° par rapport au corps),
+  le corps n'en suit qu'un tiers et reste à peu près d'aplomb ; aussi en attendant la perche et tiré par le téléski,
+  où les skis restaient à plat.
+- **Perche de TKD refaite** (retour d'utilisateur du 27/11/2026, d'après la documentation Poma reprise par
+  remontees-mecaniques.net) : douille sur le câble avec son support, son téton et son levier ajouré, trois anneaux,
+  ressort freiné apparent (spires noires, tringles, frein caoutchouc) qui s'étire quand la canne est tirée à fond,
+  canne télescopique grise au bout cintré, sellette noire.
+- **Guides des poulies de pylône des TKD** : la perche les traversait. Les deux lisses jaunes sont à la hauteur du
+  levier de l'attache et s'écartent de la jante vers le pylône ; l'attache pivote autour du câble pour passer
+  dehors, comme sur la ligne.
+- **Poulies et galets des pylônes de téléski qui tournent** : fusionnés avec le pylône à sa construction, ils
+  restaient figés (les nœuds tournaient à vide) ; les galets des trains de compression tournent aussi.
+- **Poulies « en lévitation » sur la PWA** : les pylônes allégés et les lignes lointaines de la PWA dataient d'avant
+  les hauteurs de pylônes refaites le 26/11 et les nouvelles poulies des TKD. Recuits.
+
 ## 1.79.0 — 26 novembre 2026
 
 - **Trou après le P2 des Boisses (PWA)** (retour d'utilisateur, iPad du 26/11/2026) : la fenêtre de relief fin autour
