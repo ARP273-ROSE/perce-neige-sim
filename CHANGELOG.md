@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version
+
+Retours d'essai sur la PWA (27/11/2026) :
+
+- **TKD : rien que de grandes poulies** (« les TKD n'ont pas les petits galets des TKE sur les pylônes, que des
+  grosses poulies ») : là où la montée fait un creux, une poulie de compression au-dessus du câble, dans l'axe de
+  la potence comme les poulies porteuses, sans guides (la perche pend dessous, loin d'elle). Plus aucun train de
+  petits galets sur un TKD.
+- **Brin retour sans compression** (« sur la ligne de descente il n'y a pas de poulie de compression ; si besoin il
+  n'y a pas de poulie du tout et le câble de descente passe très haut ») : le retour ne s'appuie qu'aux sommets de son
+  profil (enveloppe des têtes de pylône, chaînette comprise : un pylône sous lequel le câble pendrait reprend sa
+  poulie) ; aux creux, ni poulie ni bras, le câble passe au-dessus — jusqu'à 16 m au-dessus de la tête à la Combe
+  Folle. Pylônes survolés : 3000 aucun, Chardonnet 3, Col du Palet 4, Combe Folle 4, Pays Désert 1, Signal 1 et 2 : 2.
+- **Poulies qui tournent, et qu'on le voit** (« rien ne tourne ») : elles tournaient, mais leurs six jours
+  identiques repassaient presque au même endroit d'une image à l'autre à 30 images/s. Trois jours et un rayon peint
+  en jaune.
+- **Perche qui quitte le skieur sous un câble haut** : depuis le relief LiDAR, le câble repasse par endroits à 6-10 m
+  au-dessus des hanches (creux entre deux pylônes) et la perche s'arrêtait à 5 m. Elle se tire maintenant jusqu'à
+  10,5 m, en attendant de recaler ces portées (le câble d'un TKD reste d'ordinaire vers 5 m de la neige).
+
 ## 1.80.0 — 27 novembre 2026
 
 - **Câble qui ondule sous la cabine (PWA)** (retour d'utilisateur, vidéo iPad du 27/11/2026 au Vallon de l'Iseran) : le

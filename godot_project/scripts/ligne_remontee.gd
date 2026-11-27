@@ -2154,14 +2154,74 @@ func _y_cable_brut(d: float, montee: bool = true) -> float:
 var _raccords: Array = [[], []]
 
 
+## TKD : pylônes que le brin retour survole sans les toucher (retour d'utilisateur du 27/11/2026 : « sur la ligne de
+## descente il n'y a pas de poulie de compression ; si besoin il n'y a pas de poulie du tout et le câble de descente
+## passe très haut ») : le retour ne s'appuie que sur des poulies porteuses, donc seulement aux sommets de son profil —
+## l'enveloppe convexe par-dessus des têtes (et des deux gares) ; les pylônes dessous (creux) restent libres.
+var _retour_libre: Dictionary = {}       # indice de pylône → true
+
+
+## (la chaînette du retour pend : sur une longue portée, elle repasserait sous la tête d'un pylône survolé — il porte
+## alors, on le rend et on recommence, tant qu'un survolé n'a pas GARDE_RETOUR_LIBRE au-dessus de sa tête)
+const GARDE_RETOUR_LIBRE: float = 0.5
+
+
+func _calculer_retour_libre() -> void:
+	_retour_libre = {}
+	if famille != "perche_debrayable" or _tetes.size() != pylones.size() or pylones.size() < 2:
+		return
+	var portants: Dictionary = {0: true}
+	for _it in range(pylones.size()):
+		_enveloppe_retour(portants)
+		var pire: int = -1
+		var g_min: float = GARDE_RETOUR_LIBRE
+		for i in _retour_libre:
+			var g: float = _y_chainette(float(pylones[i]["d"]), false) - _tetes[i]
+			if g < g_min:
+				g_min = g
+				pire = i
+		if pire < 0:
+			return
+		portants[pire] = true
+
+
+func _enveloppe_retour(portants: Dictionary) -> void:
+	_retour_libre = {}
+	var L: float = longueur_h()
+	var pts: Array = [[_h_nez[0], terrain(0.0) + H_CABLE_GARE, -1]]
+	for i in range(pylones.size()):
+		pts.append([float(pylones[i]["d"]), _tetes[i], i])
+	pts.append([L - _h_nez[1], terrain(L) + H_CABLE_GARE, -1])
+	var change: bool = true
+	while change:
+		change = false
+		for k in range(1, pts.size() - 1):
+			var a: Array = pts[k - 1]
+			var b: Array = pts[k]
+			var c: Array = pts[k + 1]
+			# (le premier pylône garde sa poulie : le retour y arrive de la poulie de renvoi, en biais)
+			if int(b[2]) < 0 or portants.has(int(b[2])):
+				continue
+			var p_in: float = (float(b[1]) - float(a[1])) / maxf(float(b[0]) - float(a[0]), 0.01)
+			var p_out: float = (float(c[1]) - float(b[1])) / maxf(float(c[0]) - float(b[0]), 0.01)
+			if p_out > p_in + 1e-4:
+				_retour_libre[int(b[2])] = true
+				pts.remove_at(k)
+				change = true
+				break
+
+
 func _preparer_raccords() -> void:
 	_raccords = [[], []]
+	_calculer_retour_libre()
 	if tricable() or vaetvient() or _tetes.size() != pylones.size():
 		return
 	var n: int = pylones.size()
 	for k in [0, 1]:
 		var montee: bool = k == 0
 		for i in range(n):
+			if not montee and _retour_libre.has(i):
+				continue
 			var p: Dictionary = pylones[i]
 			var n_pos: int = 0
 			for g in p.get("montee" if montee else "descente", []):
@@ -2210,6 +2270,8 @@ func _y_chainette(d: float, montee: bool = true) -> float:
 	var xa: float = _h_nez[0]
 	var ya: float = terrain(0.0) + H_CABLE_GARE
 	for i in range(n + 1):
+		if i < n and not montee and _retour_libre.has(i):
+			continue
 		var xb: float
 		var yb: float
 		if i < n:
@@ -5413,6 +5475,7 @@ func _poser_pylones_teleski() -> void:
 			# sous un câble à 20 %)
 			if py.tkd:
 				py.dy_retour = y_cable(d, false) - y_c
+				py.retour_libre = _retour_libre.has(i)
 			if true:
 				var inv: Basis = Basis.from_euler(py.rotation).inverse()
 				for brin in [true, false]:

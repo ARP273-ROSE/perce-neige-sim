@@ -2744,7 +2744,10 @@ var _corde: Node3D               # enrouleur : corde et perche (s'étirent en mo
 ## longueur au repos (3,25 m) : 5 m, un seul coulissant (perches Poma ; photo du Chardonnet : ~4,2 m tirée sous
 ## un câble à ~4,3 m). Le câble des TKD reste donc à 3,5-5,4 m de la trace (LigneRemontee.H_TKD, PLAFOND_TKD,
 ## pylônes intercalés) ; avant, il montait à 9 m et la perche à 10,4 m (17/11/2026).
-const PERCHE_TKD_MAX: float = 5.0 / 3.25
+## Depuis le relief LiDAR (25/11), le câble repasse par endroits à 6-10 m au-dessus des hanches (creux du terrain
+## entre deux pylônes : Combe Folle 9,9 m vers d = 68, Chardonnet 8,6 m vers d = 782) et la perche, bloquée à 5 m,
+## quittait le skieur (retour d'utilisateur du 27/11/2026, PWA) : 10,5 m tirée, le temps de recaler ces portées.
+const PERCHE_TKD_MAX: float = 10.5 / 3.25
 var _perche_tige: Node3D
 
 
