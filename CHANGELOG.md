@@ -18,9 +18,13 @@ Retours d'essai sur la PWA (27/11/2026) :
   profil (enveloppe des têtes de pylône, chaînette comprise : un pylône sous lequel le câble pendrait reprend sa
   poulie) ; aux creux, ni poulie ni bras, le câble passe au-dessus — jusqu'à 16 m au-dessus de la tête à la Combe
   Folle. Pylônes survolés : 3000 aucun, Chardonnet 3, Col du Palet 4, Combe Folle 4, Pays Désert 1, Signal 1 et 2 : 2.
-- **Poulies qui tournent, et qu'on le voit** (« rien ne tourne ») : elles tournaient, mais leurs six jours
-  identiques repassaient presque au même endroit d'une image à l'autre à 30 images/s. Trois jours et un rayon peint
-  en jaune.
+- **Vraies poulies de téléski** (« fais le design d'une vraie poulie de téléski »), d'après les photos de pylônes Poma
+  de remontees-mecaniques.net : Ø 1 m en support, 0,80 m en compression ; jante en U à garniture caoutchouc et joues
+  évasées, six rayons plats rivés, moyeu boulonné à flasques, chapeau de roulement ; en sortie de chaque poulie
+  porteuse, le petit galet jaune détecteur de déraillement posé sur le câble au bout de son levier, contacteur au
+  pivot ; en compression, la tige rouge du contacteur au-dessus du câble. Les rails anti-déraillement qui écartent la
+  perche sont galvanisés comme sur les photos. On voit maintenant la poulie tourner (avant : flasque plein à six
+  jours identiques, qui semblait figé à 30 images/s — « rien ne tourne »), le galet détecteur aussi.
 - **Perche qui quitte le skieur sous un câble haut** : depuis le relief LiDAR, le câble repasse par endroits à 6-10 m
   au-dessus des hanches (creux entre deux pylônes) et la perche s'arrêtait à 5 m. Elle se tire maintenant jusqu'à
   10,5 m, en attendant de recaler ces portées (le câble d'un TKD reste d'ordinaire vers 5 m de la neige).

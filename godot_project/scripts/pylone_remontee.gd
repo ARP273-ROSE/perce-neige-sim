@@ -793,17 +793,16 @@ func tourner_roues(dphi: float) -> void:
 	for r in _roues:
 		(r[0] as Node3D).rotate_object_local(Vector3.UP, float(r[1]) * dphi)
 	# poulies des TKD (retour d'utilisateur du 26/11/2026 : « les roues des pylônes des TKD ne tournent pas »)
-	var k: float = R_GALET / R_POULIE_PYL_TKD
 	for p in _poulies_tkd:
 		if is_instance_valid(p[0]):
-			(p[0] as Node3D).rotate_object_local(Vector3.RIGHT, float(p[1]) * dphi * k)
+			(p[0] as Node3D).rotate_object_local(Vector3.RIGHT, float(p[1]) * dphi * R_GALET / float(p[2]))
 	# galets des trains de téléski (retour du 27/11/2026 : « aucune poulie de TKD ne tourne ») : axe = Y du maillage
 	for g in _galets_tk:
 		if is_instance_valid(g[0]):
 			(g[0] as Node3D).rotate_object_local(Vector3.UP, float(g[1]) * dphi)
 
 
-var _poulies_tkd: Array = []          # [roue, sens] des poulies de ligne d'un TKD
+var _poulies_tkd: Array = []          # [roue, sens, rayon] des poulies de ligne d'un TKD (et de leurs galets détecteurs)
 var _galets_tk: Array = []            # [galet, sens × R_GALET / r] des trains de galets des téléskis
 
 
@@ -920,7 +919,14 @@ func _bras_treillis_tkd(h: float, bout: float, xs: Array) -> void:
 		RemonteeKit.boite_en(self, Vector3(0.32, 0.14, 0.30), Vector3(x_fut, y, 0), m)
 
 
-const R_POULIE_PYL_TKD: float = 0.40
+## Poulies de ligne des TKD (remontees-mecaniques.net, « Le téléski à perches découplables » : « le diamètre de la poulie
+## est de l'ordre de 1 m » au pylône support ; en support-compression, la poulie de compression est la plus petite).
+const R_POULIE_PYL_TKD: float = 0.50
+const R_POULIE_COMP_TKD: float = 0.40
+
+
+static func r_poulie_tkd(compression: bool) -> float:
+	return R_POULIE_COMP_TKD if compression else R_POULIE_PYL_TKD
 
 
 ## TKD : rien que de grandes poulies, jamais les petits galets des téléskis (retour d'utilisateur du 27/11/2026 :
@@ -964,7 +970,7 @@ func _grande_poulie_tkd(c: Vector3, tilt: float, y_bras: float, montee: bool = t
 ## et à celui qui repart (`s`), son centre du côté où le câble tourne, à R sous la gorge ; le câble l'enroule
 ## sur l'angle de sa déviation, tangent des deux côtés.
 func _poulie_tkd_dans_le_plan(c: Vector3, e: Vector3, s: Vector3, y_bras: float, montee: bool = true, dessus: bool = false) -> void:
-	var R: float = R_POULIE_PYL_TKD
+	var R: float = r_poulie_tkd(dessus)
 	e = e.normalized()
 	s = s.normalized()
 	var axe: Vector3 = e.cross(s)
@@ -985,13 +991,17 @@ func _poulie_tkd_dans_le_plan(c: Vector3, e: Vector3, s: Vector3, y_bras: float,
 	n.name = "PoulieTKD"
 	n.transform = Transform3D(Basis(axe, yv, zv), c)
 	add_child(n)
+	# sortie du câble (repère de la poulie) : il file vers l'amont au brin montant (s), vers l'aval au retour (−e)
+	_sortie_tkd = n.transform.basis.inverse() * (s if montee else -e)
 	_monture_poulie_tkd(n, Vector3(0, -R - 0.012, 0), y_bras, montee, not dessus)
+	_sortie_tkd = Vector3.ZERO
 
 
 ## Hauteur (repère du pylône) du centre de la poulie du brin : R sous le câble en support, au-dessus en compression.
 func _y_centre_poulie_tkd(montee: bool) -> float:
 	var yc: float = hauteur - DESSUS_BRAS_TELESKI + (0.0 if montee else dy_retour)
-	return yc + (R_POULIE_PYL_TKD + 0.012) * (1.0 if genre_poulie_tkd(montee) == "C" else -1.0)
+	var comp: bool = genre_poulie_tkd(montee) == "C"
+	return yc + (r_poulie_tkd(comp) + 0.012) * (1.0 if comp else -1.0)
 
 
 ## Poulie de ligne d'un TKD et sa monture (retour d'utilisateur du 26/11/2026 : « la roue est reliée au pylône par
@@ -1002,33 +1012,55 @@ func _y_centre_poulie_tkd(montee: bool) -> float:
 ## et l'axe le prolonge jusqu'au moyeu (platine au bout du bras). Côté extérieur, rien au-dessus de la gorge — la pince y passe — et deux guides courbes, tenus par
 ## une traverse sous la roue, écartent la perche de la jante avant le pylône et la ramènent après.
 ## `n` : repère de la poulie (X = axe), `o` : centre de la roue, `y_bras` : dessous du bras (repère du pylône).
+var _sortie_tkd: Vector3 = Vector3.ZERO     # (passée de _poulie_tkd_dans_le_plan à _securite_poulie_tkd)
+
+
 func _monture_poulie_tkd(n: Node3D, o: Vector3, y_bras: float, montee: bool = true, guides: bool = true) -> void:
-	var R: float = R_POULIE_PYL_TKD
+	var R: float = r_poulie_tkd(not guides)
 	# côté fût dans le repère de la poulie
 	var vers_fut: Vector3 = n.transform.basis.inverse() * Vector3(signf(x_fut - n.position.x) if absf(x_fut - n.position.x) > 0.01 else 1.0, 0, 0)
 	var si: float = signf(vers_fut.x) if absf(vers_fut.x) > 1e-3 else 1.0
 	var axe_x: Transform3D = Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3.ZERO)
-	# roue (nœud à part, qui tourne : tourner_roues) : bandage caoutchouc, joues de la gorge, flasque plein
-	# percé de six jours (on la voit tourner), moyeu
+	# roue (nœud à part, qui tourne : tourner_roues), d'après les photos de pylônes Poma (remontees-mecaniques.net,
+	# « Le téléski à perches découplables » ; demande d'utilisateur du 27/11/2026 : « fais le design d'une vraie
+	# poulie de téléski ») : jante en U galvanisée, garniture caoutchouc noire au fond de la gorge, deux joues
+	# évasées, six rayons plats rivés à un moyeu à flasques, roulement sous un chapeau
 	var roue: Node3D = Node3D.new()
 	roue.name = "Roue"
 	roue.position = o
 	n.add_child(roue)
-	RemonteeKit.tube(roue, RemonteeKit.arc(Vector3.ZERO, Vector3.BACK, Vector3.UP, R, 0.0, TAU, 36), 0.03, "caoutchouc", 8)
-	for dx in [-0.045, 0.045]:
-		RemonteeKit.tube(roue, RemonteeKit.arc(Vector3(dx, 0, 0), Vector3.BACK, Vector3.UP, R + 0.035, 0.0, TAU, 36), 0.018, "galva", 6)
-	RemonteeKit.cylindre(roue, R - 0.02, R - 0.02, 0.025, axe_x, "galva", 28)
-	# (trois jours et un rayon peint, pas six jours : à 10 rad/s, sur l'iPad à 30 images/s, six jours identiques
-	# repassaient presque au même endroit d'une image à l'autre — « rien ne tourne », retour du 27/11/2026)
-	for k in range(3):
-		var a: float = TAU * k / 3.0
-		RemonteeKit.cylindre(roue, 0.075, 0.075, 0.035, Transform3D(axe_x.basis, Vector3(0, sin(a), cos(a)) * (R * 0.55)), "acier_noir", 10)
-	for dx2 in [-0.019, 0.019]:
-		RemonteeKit.boite_en(roue, Vector3(0.004, R * 0.62, 0.05), Vector3(dx2, -R * 0.52, 0), "jaune_securite")
-	RemonteeKit.cylindre(roue, 0.08, 0.08, 0.13, axe_x, "galva", 14)
-	# sens : le haut de la roue (sous le câble) file comme le câble — vers l'amont (−Z du pylône) au brin montant
+	var arc_r := func(r: float, dx: float) -> PackedVector3Array:
+		return RemonteeKit.arc(Vector3(dx, 0, 0), Vector3.BACK, Vector3.UP, r, 0.0, TAU, 40)
+	# (câble de ~16 mm posé au fond : son axe à R + 0,012 du centre, la garniture affleure sous lui)
+	RemonteeKit.tube(roue, arc_r.call(R - 0.012, 0.0), 0.014, "caoutchouc", 8)          # garniture
+	for dx0 in [-0.035, 0.0, 0.035]:
+		RemonteeKit.tube(roue, arc_r.call(R - 0.03, dx0), 0.016, "galva", 6)             # fond de la jante
+	for dx in [-0.05, 0.05]:
+		RemonteeKit.tube(roue, arc_r.call(R + 0.012, dx), 0.012, "galva", 6)            # joues
+		RemonteeKit.tube(roue, arc_r.call(R + 0.034, dx * 1.25), 0.010, "galva", 6)     # lèvres évasées
+		RemonteeKit.tube(roue, arc_r.call(R - 0.05, dx * 0.6), 0.014, "galva", 6)       # rebord intérieur
+	var r_moy: float = 0.10
+	for k in range(6):
+		var a: float = TAU * k / 6.0
+		var u: Vector3 = Vector3(0, sin(a), cos(a))
+		# rayon plat (fer de 60 × 14), du moyeu à la jante (Y local du fer selon u)
+		RemonteeKit.boite(roue, Vector3(0.014, R - 0.06 - r_moy, 0.06), Transform3D(Basis(Vector3.RIGHT, PI * 0.5 - a), u * (0.5 * (R - 0.06 + r_moy))), "galva")
+		for rr in [R - 0.07, r_moy + 0.03]:
+			RemonteeKit.cylindre(roue, 0.012, 0.012, 0.03, Transform3D(axe_x.basis, u * rr), "acier_noir", 6)   # rivets
+	RemonteeKit.cylindre(roue, r_moy + 0.02, r_moy + 0.02, 0.03, Transform3D(axe_x.basis, Vector3(0.03, 0, 0)), "galva", 16)
+	RemonteeKit.cylindre(roue, r_moy + 0.02, r_moy + 0.02, 0.03, Transform3D(axe_x.basis, Vector3(-0.03, 0, 0)), "galva", 16)
+	RemonteeKit.cylindre(roue, 0.065, 0.065, 0.16, axe_x, "galva", 14)
+	for b in range(6):
+		var ab: float = TAU * (b + 0.5) / 6.0
+		RemonteeKit.cylindre(roue, 0.010, 0.010, 0.09, Transform3D(axe_x.basis, Vector3(0, sin(ab), cos(ab)) * 0.085), "acier_noir", 6)  # boulons
+	# sens : le point d'appui (+Y du repère) file comme le câble — vers l'amont (−Z du pylône) au brin montant
 	var file: Vector3 = n.transform.basis.inverse() * Vector3(0, 0, -1.0 if montee else 1.0)
-	_poulies_tkd.append([roue, signf(file.z) if absf(file.z) > 1e-3 else 1.0])
+	var sens: float = signf(file.z) if absf(file.z) > 1e-3 else 1.0
+	_poulies_tkd.append([roue, sens, R])
+	# chapeau de roulement, côté extérieur (graisseur)
+	RemonteeKit.cylindre(n, 0.05, 0.04, 0.06, Transform3D(axe_x.basis, o + Vector3(-si * 0.11, 0, 0)), "galva", 12)
+	RemonteeKit.cylindre(n, 0.008, 0.008, 0.03, Transform3D(axe_x.basis, o + Vector3(-si * 0.155, 0, 0)), "jaune_securite", 6)
+	_securite_poulie_tkd(n, o, R, si, sens, guides)
 	# axe horizontal en porte-à-faux, côté fût, et sa platine
 	var la: float = 0.30
 	RemonteeKit.cylindre(n, 0.035, 0.035, la, Transform3D(axe_x.basis, o + Vector3(si * (0.065 + la * 0.5), 0, 0)), "acier_noir", 10)
@@ -1055,7 +1087,50 @@ func _monture_poulie_tkd(n: Node3D, o: Vector3, y_bras: float, montee: bool = tr
 		for k in range(17):
 			var z: float = lerpf(LigneRemontee.GUIDE_TKD_L, -LigneRemontee.GUIDE_TKD_L, k / 16.0)
 			pts.append(Vector3(-si * LigneRemontee.x_guide_tkd(z), float(yl), z))
-		RemonteeKit.tube(n, pts, 0.018, "jaune_securite", 6)
+		RemonteeKit.tube(n, pts, 0.018, "galva", 6)
+
+
+## Sécurités de déraillement d'une poulie de TKD (remontees-mecaniques.net, « Le téléski à perches découplables ») :
+## au support, « une petite roue » jaune en contact permanent avec le câble en sortie du pylône, au bout d'un levier
+## dont le pivot porte le contacteur — si le câble déraille, elle tombe et arrête l'installation ; en compression,
+## le câble qui déraille part vers le haut et soulève une tige (rouge) qui actionne un contacteur.
+## `sens` : +1 si le câble file vers +Z du repère de la poulie (le câble sort de ce côté-là).
+func _securite_poulie_tkd(n: Node3D, o: Vector3, R: float, si: float, sens: float, support: bool) -> void:
+	var xp: float = si * (0.065 + 0.30)
+	var axe_x: Basis = Basis(Vector3.BACK, PI * 0.5)
+	# le câble quitte la roue tangent à la sortie : point de tangence T (normale `nr`, à l'opposé du centre), puis droit
+	var so: Vector3 = _sortie_tkd if _sortie_tkd != Vector3.ZERO else Vector3(0, 0, sens)
+	so = Vector3(0, so.y, so.z).normalized()
+	var nr: Vector3 = Vector3(0, so.z, -so.y)
+	if nr.y < 0.0:
+		nr = -nr
+	var T: Vector3 = o + nr * (R + 0.012)
+	var p_sortie: Vector3 = T + so * 0.32
+	if support:
+		var rg: float = 0.075
+		var galet: Node3D = Node3D.new()
+		galet.name = "Detecteur"
+		galet.position = p_sortie + nr * (0.012 + rg)
+		n.add_child(galet)
+		RemonteeKit.cylindre(galet, rg, rg, 0.065, Transform3D(axe_x, Vector3.ZERO), "jaune_securite", 16)
+		RemonteeKit.cylindre(galet, 0.022, 0.022, 0.08, Transform3D(axe_x, Vector3.ZERO), "galva", 8)
+		# (le bas du galet touche le câble : il tourne à l'envers de la poulie)
+		_poulies_tkd.append([galet, -sens, rg])
+		var piv: Vector3 = galet.position + nr * 0.26 - so * 0.30 + Vector3(si * 0.10, 0, 0)
+		var bout: Vector3 = galet.position + Vector3(si * 0.045, 0, 0)
+		RemonteeKit.barre(n, bout, piv, 0.014, "acier_noir", 6)
+		RemonteeKit.barre(n, bout, bout - Vector3(si * 0.045, 0, 0), 0.012, "galva", 6)
+		# contacteur : boîtier rond noir au pivot, câble électrique jusqu'à la platine
+		RemonteeKit.cylindre(n, 0.085, 0.085, 0.05, Transform3D(axe_x, piv + Vector3(si * 0.03, 0, 0)), "acier_noir", 18)
+		RemonteeKit.barre(n, piv + Vector3(si * 0.055, 0, 0), Vector3(xp, piv.y, piv.z), 0.02, "galva", 6)
+		RemonteeKit.barre(n, Vector3(xp, piv.y, piv.z), Vector3(xp, o.y + 0.12, 0.0), 0.02, "galva", 6)
+	else:
+		# tige au-dessus du câble en sortie, en travers, et contacteur côté fût
+		# (côté roue du câble : là où il partirait en déraillant)
+		var pt: Vector3 = p_sortie - nr * 0.06
+		RemonteeKit.barre(n, Vector3(-si * 0.12, pt.y, pt.z), Vector3(xp, pt.y, pt.z), 0.009, "mousse_rouge", 6)
+		RemonteeKit.boite_en(n, Vector3(0.06, 0.09, 0.07), Vector3(xp, pt.y, pt.z), "acier_noir")
+		RemonteeKit.barre(n, Vector3(xp, pt.y, pt.z), Vector3(xp, o.y, 0.0), 0.02, "galva", 6)
 
 
 func _construire_teleski() -> void:
