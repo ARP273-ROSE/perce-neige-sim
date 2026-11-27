@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Prochaine version
+## 1.81.0 — 27 novembre 2026
 
 Retours d'essai sur la PWA (27/11/2026) :
 
