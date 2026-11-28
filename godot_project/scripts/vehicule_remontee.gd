@@ -2747,7 +2747,10 @@ var _corde: Node3D               # enrouleur : corde et perche (s'étirent en mo
 ## Depuis le relief LiDAR (25/11), le câble repasse par endroits à 6-10 m au-dessus des hanches (creux du terrain
 ## entre deux pylônes : Combe Folle 9,9 m vers d = 68, Chardonnet 8,6 m vers d = 782) et la perche, bloquée à 5 m,
 ## quittait le skieur (retour d'utilisateur du 27/11/2026, PWA) : 10,5 m tirée, le temps de recaler ces portées.
-const PERCHE_TKD_MAX: float = 10.5 / 3.25
+## Recalées le 28/11/2026 (la ligne prenait le relief à 25 m sur la trace, des bosses fantômes de 3 à 5 m : pylônes
+## relevés à 6,5 m) : câble à 5 m au plus des hanches, 6,1 m à deux sorties de gare (Combe Folle, Col du Palet) ;
+## perche de 5,75 m tirée (fût, tube et piston emboîtés), 5,97 m ressort étiré.
+const PERCHE_TKD_MAX: float = 5.75 / 3.25
 var _perche_tige: Node3D
 
 
@@ -2893,9 +2896,14 @@ func _suspente_tkd() -> void:
 	# embout bas en chape, axe et goupille fendue
 	RemonteeKit.cylindre(_bas_tkd, 0.016, 0.016, 0.07, Transform3D(Basis.IDENTITY, Vector3(0, -TKD_BOITIER + 0.035, 0)), "galva", 8)
 	RemonteeKit.cylindre(_bas_tkd, 0.007, 0.007, 0.05, Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(0, -TKD_BOITIER + 0.012, 0)), "acier", 6)
-	# 3. canne télescopique : tube gris de taille constante, puis les coulissants
-	RemonteeKit.barre(_bas_tkd, Vector3(0, -TKD_BOITIER, 0), Vector3(0, -TKD_FIXE, 0), 0.021, "galva", 8)
-	RemonteeKit.cylindre(_bas_tkd, 0.026, 0.026, 0.06, Transform3D(Basis.IDENTITY, Vector3(0, -TKD_FIXE + 0.03, 0)), "noir_mat", 8)
+	# 3. canne télescopique (retour d'utilisateur du 28/11/2026 : « une douille en haut, puis un ressort, puis un fût
+	# dans lequel coulisse le piston, mais le bout ne dépasse pas par le ressort en haut » — l'élément coulissant de
+	# 3,20 m remontait au repos au-dessus de l'articulation, à travers le ressort) : FÛT gris épais sous le ressort,
+	# bague noire à sa sortie ; dedans, le tube intermédiaire, et dans celui-ci le PISTON. Chaque élément est plus
+	# court que son logement : rentré, son haut reste dedans (sous le haut du fût, sous le haut du tube).
+	RemonteeKit.barre(_bas_tkd, Vector3(0, -TKD_BOITIER, 0), Vector3(0, -TKD_FIXE, 0), 0.026, "galva", 10)
+	RemonteeKit.cylindre(_bas_tkd, 0.030, 0.030, 0.035, Transform3D(Basis.IDENTITY, Vector3(0, -TKD_BOITIER - 0.0175, 0)), "noir_mat", 10)
+	RemonteeKit.cylindre(_bas_tkd, 0.031, 0.031, 0.06, Transform3D(Basis.IDENTITY, Vector3(0, -TKD_FIXE + 0.03, 0)), "noir_mat", 10)
 	_coulisses.clear()
 	var parent: Node3D = _bas_tkd
 	var n: int = nb_coulisses_tkd()
@@ -2903,18 +2911,19 @@ func _suspente_tkd() -> void:
 		var c := Node3D.new()
 		c.name = "Coulisse%d" % (k + 1)
 		parent.add_child(c)
-		var r: float = maxf(0.016 - 0.0015 * float(k), 0.008)
-		RemonteeKit.barre(c, Vector3(0, 0, 0), Vector3(0, -TKD_ELEMENT, 0), r, "galva", 8)
+		var r: float = 0.020 - 0.0045 * float(k)
+		var lk: float = longueur_coulisse_tkd(k)
+		RemonteeKit.barre(c, Vector3(0, 0, 0), Vector3(0, -lk, 0), r, "galva" if k < n - 1 else "acier", 8)
 		if k < n - 1:
 			RemonteeKit.cylindre(c, r + 0.004, r + 0.004, 0.05, Transform3D(Basis.IDENTITY,
-				Vector3(0, -TKD_ELEMENT + 0.025, 0)), "noir_mat", 8)
+				Vector3(0, -lk + 0.025, 0)), "noir_mat", 8)
 		_coulisses.append(c)
 		parent = c
 	# 4. bout cintré vers le skieur (+Z, derrière la pince) et sellette noire
 	_assiette = Node3D.new()
 	_assiette.name = "Assiette"
 	parent.add_child(_assiette)
-	_assiette.position = Vector3(0, -TKD_ELEMENT, 0)
+	_assiette.position = Vector3(0, -longueur_coulisse_tkd(n - 1), 0)
 	var cint: PackedVector3Array = PackedVector3Array()
 	for k2 in range(7):
 		var a2: float = float(k2) / 6.0 * deg_to_rad(35.0)
@@ -2949,15 +2958,15 @@ func deroule(t: float) -> void:
 
 
 ## Perche télescopique du TKD (16/11/2026 : toute la tige était étirée en y — à 3×, boîtier et assiette
-## déformés). Longueurs des photos du Chardonnet : tube gris 1,30 m, boîtier noir du ressort 0,80 m, tige 1,10 m
-## au repos, assiette de ~20 cm ; 3,25 m de l'articulation à l'assiette. Au-delà, le coulissant de TKD_ELEMENT m
-## sort du boîtier (au plus de TKD_ELEMENT − TKD_RECOUVREMENT) ; s'il fallait plus long, des éléments emboîtés
-## de plus : leur nombre suit la longueur maximale (3,25 × PERCHE_TKD_MAX). Rien n'est mis à l'échelle.
-const TKD_TUBE: float = 1.30
+## déformés). Ressort freiné de 0,80 m, FÛT gris de 1,90 m (1,30 m mesuré au Chardonnet : trop court pour loger
+## une course qui suive le câble à 6 m des hanches), assiette de ~20 cm ; 3,02 m de l'articulation à l'assiette au
+## repos. Dans le fût coulisse un tube, dans le tube le piston (longueur_coulisse_tkd : 5 cm de moins que leur
+## logement, ils y rentrent en entier — rien ne remonte dans le ressort), chacun sortant au plus de sa longueur
+## − TKD_RECOUVREMENT ; leur nombre suit la longueur maximale (3,25 × PERCHE_TKD_MAX). Rien n'est mis à l'échelle.
+const TKD_TUBE: float = 1.90
 const TKD_BOITIER: float = 0.80
 const TKD_FIXE: float = TKD_TUBE + TKD_BOITIER
 const TKD_REPOS: float = 3.02                    # (articulation 0,45 m sous le câble : assiette au repos où elle était)
-const TKD_ELEMENT: float = 3.20
 const TKD_RECOUVREMENT: float = 0.30
 var _coulisses: Array = []                 # éléments emboîtés, du boîtier vers l'assiette (copiés : LISTES)
 var _assiette: Node3D = null
@@ -2965,8 +2974,17 @@ var longueur_tkd: float = TKD_REPOS
 
 
 static func nb_coulisses_tkd() -> int:
-	var sortie_max: float = 3.25 * PERCHE_TKD_MAX - TKD_FIXE
-	return maxi(1, int(ceil(sortie_max / (TKD_ELEMENT - TKD_RECOUVREMENT))))
+	var reste: float = 3.25 * PERCHE_TKD_MAX - TKD_FIXE
+	var k: int = 0
+	while reste > 0.001 and k < 6:
+		reste -= longueur_coulisse_tkd(k) - TKD_RECOUVREMENT
+		k += 1
+	return maxi(1, k)
+
+
+## Élément k (0 : celui qui sort du fût) : 5 cm de moins que son logement, pour y rentrer en entier.
+static func longueur_coulisse_tkd(k: int) -> float:
+	return TKD_TUBE - 0.05 * float(k + 1)
 
 
 ## Longueur de l'articulation à l'assiette (m), bornée au repos et à la longueur maximale.
@@ -2982,20 +3000,19 @@ func _telescoper(l: float) -> void:
 	l = clampf(l, TKD_REPOS, lmax)
 	longueur_tkd = l + etire
 	var e_tot: float = l - TKD_FIXE
-	var e_max: float = TKD_ELEMENT - TKD_RECOUVREMENT
 	# (la tige du bout sort d'abord, puis l'élément qui la porte, etc.)
 	var sorties: Array = []
 	sorties.resize(_coulisses.size())
 	for k in range(_coulisses.size() - 1, -1, -1):
-		var e: float = minf(e_tot, e_max)
+		var e: float = minf(e_tot, longueur_coulisse_tkd(k) - TKD_RECOUVREMENT)
 		sorties[k] = e
 		e_tot -= e
 	for k2 in range(_coulisses.size()):
 		var c: Node3D = _coulisses[k2]
 		# l'élément sort de son parent (le boîtier, ou l'élément précédent) de `sorties` : son bas est à
 		# la sortie du parent − sortie
-		var y_sortie: float = -TKD_FIXE if k2 == 0 else -TKD_ELEMENT
-		c.position = Vector3(0, y_sortie - float(sorties[k2]) + TKD_ELEMENT, 0)
+		var y_sortie: float = -TKD_FIXE if k2 == 0 else -longueur_coulisse_tkd(k2 - 1)
+		c.position = Vector3(0, y_sortie - float(sorties[k2]) + longueur_coulisse_tkd(k2), 0)
 
 
 ## Assiette dans le monde (bancs, skieurs tirés).

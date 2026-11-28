@@ -523,6 +523,14 @@ func _construire_corps() -> void:
 	_construire_boucle()
 	_yc_boucle = []
 	await _pause("boucle")
+	# (quais des télécabines : ils suivent le chemin des cabines, connu une fois la boucle posée)
+	if famille.begins_with("cabine"):
+		for av in [true, false]:
+			var nom_g: String = "GareAval" if av else "GareAmont"
+			var gq: Node = _chantier.get_node_or_null(nom_g) if _chantier != null else get_node_or_null(nom_g)
+			if gq != null:
+				_quais_cabine(gq as Node3D, av)
+		await _pause("quais")
 	if tricable():
 		_charpente_3s(true)
 		await _pause("charpente 3S")
@@ -3265,6 +3273,51 @@ func _gare(aval: bool) -> void:
 	MeshMerge.merge(g, [g.get_node("Inclinaison") if g.has_node("Inclinaison") else g.get_node("Poulie")], "Gare")
 
 
+## Quais d'une télécabine débrayable (retour d'utilisateur du 28/11/2026 : « aux gares des TCD, il y a des quais à
+## l'extérieur du virage des cabines, un peu comme le 3S » ; photos du TCD10 du Vallon, remontees-mecaniques.net :
+## « la zone d'embarquement se situe tout le long du contour », gare de plain-pied) : une bande de béton au niveau du
+## plancher des cabines, à l'EXTÉRIEUR de leur chemin (côté portes), de la fin du freinage au lanceur, autour du
+## demi-tour compris ; nez jaune côté cabines, à QUAI_JEU de leur flanc.
+const QUAI_DEMI_CABINE: float = 1.10
+const QUAI_JEU: float = 0.15
+const QUAI_LARGEUR: float = 3.2
+const QUAI_NEZ: float = 0.30
+
+
+func _quais_cabine(g: Node3D, aval: bool) -> void:
+	if tricable() or famille == "cabine_tph" or famille == "cabine_funi":
+		return
+	var s0: float = s_gare(aval, 0.0)
+	var l: float = longueur_zone(aval)
+	var y: float = 0.03
+	var bandes: Array = [[QUAI_DEMI_CABINE + QUAI_JEU, QUAI_DEMI_CABINE + QUAI_JEU + QUAI_NEZ, "jaune_securite"],
+		[QUAI_DEMI_CABINE + QUAI_JEU + QUAI_NEZ, QUAI_DEMI_CABINE + QUAI_JEU + QUAI_LARGEUR, "beton"]]
+	for bd in bandes:
+		var st: SurfaceTool = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var prec: Array = []
+		var x: float = L_FREIN - 1.0
+		while x <= l - L_FREIN + 1.01:
+			var p: Vector3 = _point_cable(s0 + x)[0]
+			var o: Vector3 = _dehors(s0 + x)
+			var a: Vector3 = Vector3(p.x, 0, p.z) + o * float(bd[0])
+			var b: Vector3 = Vector3(p.x, 0, p.z) + o * float(bd[1])
+			var e: Array = [Vector3(a.x, y, a.z), Vector3(b.x, y, b.z)]
+			if not prec.is_empty():
+				for t in [[prec[0], e[0], e[1]], [prec[0], e[1], prec[1]]]:
+					var ordre: Array = t if ((t[1] as Vector3) - t[0]).cross((t[2] as Vector3) - t[0]).y < 0.0 else [t[0], t[2], t[1]]
+					for v in ordre:
+						st.set_normal(Vector3.UP)
+						st.add_vertex(v)
+			prec = e
+			x += 0.5
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = "Quai" if bd[2] == "beton" else "NezQuai"
+		mi.mesh = MeshMerge.valider(st)
+		mi.material_override = RemonteeKit.mat(bd[2])
+		g.add_child(mi)
+
+
 # --- plate-forme de gare -----------------------------------------------------------
 
 const PENTE_RAMPE: float = 0.10     # rampe d'accès côté portillons (10 %)
@@ -3868,9 +3921,15 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 	# posées au sol devant la gare, entretoisées entre les deux voies
 	# (retour d'utilisateur, 25/10/2026 : « faut faire les supports métalliques
 	# qui permettent l'arrondi du câble à l'entrée des gares »)
+	# Deux JOUES par voie, une sous chaque porteur (gorge sur le dessus, au ras du câble), et le tracteur dans la
+	# fente entre elles, sur ses galets (retour d'utilisateur du 28/11/2026 : « le câble du 3S a tendance à rentrer
+	# à l'intérieur des supports qui sont en sortie des gares » — le caisson plein de 0,9 m, centré sur la voie,
+	# englobait le tracteur, 0,42 m sous les porteurs ; même dessin qu'aux gares du Fornet le 12/11)
 	var L3: float = longueur_h()
 	var d_bout: float = NEZ_3S + 1.0
 	var ext: Array = []
+	var e_p: float = VehiculeRemontee.E_PORTEURS_3S * 0.5
+	var h_j: float = 0.8
 	for sx3 in [-1.0, 1.0]:
 		var xb: float = sx3 * voie * 0.5
 		var montee3: bool = sx3 == signf(_x_brin(true))
@@ -3881,7 +3940,20 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 			var yc: float = y_cable(clampf(dl, 0.0, L3), montee3) if dd > 0.0 else terrain(0.0 if aval else L3) + H_CABLE_GARE
 			pts.append(Vector3(xb, yc - g.position.y - 0.55, -dl))
 		for k4 in range(pts.size() - 1):
-			RemonteeKit.poutre(g, pts[k4], pts[k4 + 1], 0.9, 0.8, "peinture_gris")
+			var pa: Vector3 = pts[k4] + Vector3(0, 0.55, 0)          # axe des porteurs
+			var pb: Vector3 = pts[k4 + 1] + Vector3(0, 0.55, 0)
+			for side in [-1.0, 1.0]:
+				var oj: Vector3 = Vector3(side * e_p, -0.03 - h_j * 0.5, 0)
+				RemonteeKit.poutre(g, pa + oj, pb + oj, 0.24, h_j, "peinture_gris")
+				var og: Vector3 = Vector3(side * e_p, -0.04, 0)
+				RemonteeKit.poutre(g, pa + og, pb + og, 0.11, 0.03, "acier_noir")    # gorge garnie
+			# galets du tracteur dans la fente, axe d'une joue à l'autre ; entretoise dessous
+			if k4 % 2 == 0:
+				var pm: Vector3 = (pa + pb) * 0.5
+				var yg: float = pm.y + VehiculeRemontee.Y_TRACTEUR_3S - diametre_cable * 0.0005 - 0.15
+				RemonteeKit.galet(g, Vector3(xb, yg, pm.z), 0.15)
+				RemonteeKit.cylindre(g, 0.02, 0.02, 2.0 * e_p, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(xb, yg, pm.z)), "acier_noir", 8)
+				RemonteeKit.boite_en(g, Vector3(2.0 * e_p + 0.24, 0.10, 0.20), Vector3(xb, pm.y - 0.03 - h_j + 0.05, pm.z), "peinture_gris")
 		ext.append(pts[pts.size() - 1])
 		# béquilles depuis le sol ENTRE les deux voies (retour d'utilisateur,
 		# 27/10/2026 : posées de part et d'autre de chaque voie, on les
@@ -7261,14 +7333,17 @@ func _preparer_charges() -> void:
 		# le porteur repose sur tout le sabot : pas de flèche sur sa longueur. Téléphériques aussi (audit
 		# du 14/11/2026 : appuyée au centre du pylône, la flèche passait le chariot 0,59 m sous le sabot et
 		# le chemin de la cabine y faisait un coude de 2P/H = 8,7°, 4-5° de balancement parasite)
-		_appuis = PackedFloat32Array([0.0])
+		# (3S : aux nez aussi, le porteur repose sur le sabot de nez jusqu'à son bout, NEZ_3S + 1 m — appuyée au nez,
+		# la flèche de la première portée le creusait dans le sabot : « le câble du 3S a tendance à rentrer à
+		# l'intérieur des supports qui sont en sortie des gares », retour d'utilisateur du 28/11/2026)
+		_appuis = PackedFloat32Array([NEZ_3S + 1.0 if tricable() else 0.0])
 		for p2 in pylones:
 			# (3S : les bouts réels de la poutre, décentrée sur l'ouvrage — l_aval / l_amont ; centrés, les appuis
 			# laissaient un bout du sabot dans la portée, porteurs et tracteur creusés jusqu'à 0,48 m sous lui)
 			var bs2: Vector2 = bouts_sabot_3s(p2) if tricable() else Vector2(float(p2["d"]) - SABOT_TPH * 0.5, float(p2["d"]) + SABOT_TPH * 0.5)
 			_appuis.append(bs2.x)
 			_appuis.append(bs2.y)
-		_appuis.append(longueur_h())
+		_appuis.append(longueur_h() - (NEZ_3S + 1.0 if tricable() else 0.0))
 	_n_appuis = mini(_appuis.size(), 48)
 	_tension = tension_h()
 	var e: float = maxf(espacement, 8.0)
@@ -7490,16 +7565,47 @@ var _d_porteurs: PackedFloat32Array = PackedFloat32Array()
 ## 3S : axe du porteur TEL QU'IL EST DESSINÉ en d (repère de la ligne) : le nuanceur creuse chaque sommet du tube de sa
 ## flèche et la carte graphique trace un segment droit entre deux sommets (4 m en ligne). Les galets du chariot
 ## roulent sur ce segment-là (retour d'utilisateur du 21/11/2026, vidéo PWA : « le câble bouge sous les galets »).
+## Depuis le 24/11, le nuanceur fait aussi GLISSER le sommet le plus proche d'une charge (à moins d'un demi-pas, dans
+## sa portée) jusque sous elle, le long de la pente du porteur (accrocher) : le chariot posé sur le segment entre
+## sommets FIXES s'en décalait en dents de scie, une dent tous les 4 m — vidéo PWA du 28/11/2026, Olympique à
+## 27 km/h : « j'ai une oscillation câble/cabine encore sur le 3S », les câbles montaient et descendaient de ~2,5 px
+## toutes les 0,55 s autour de la cabine suivie. Même règle que _fleche_affichee (pinces des monocâbles, 27/11).
 func y_porteur_dessine(d: float, montee: bool) -> float:
 	var t: PackedFloat32Array = _d_porteurs
 	if t.size() < 2:
 		return y_cable(d, montee) - _fleche(d, montee)
-	var j: int = clampi(t.bsearch(d), 1, t.size() - 1)
-	var a: float = t[j - 1]
-	var b: float = t[j]
-	var ya: float = y_cable(a, montee) - _fleche(a, montee)
-	var yb: float = y_cable(b, montee) - _fleche(b, montee)
-	return lerpf(ya, yb, clampf((d - a) / maxf(b - a, 1e-4), 0.0, 1.0))
+	var n: int = t.size()
+	var j: int = clampi(t.bsearch(d), 1, n - 1)
+	var charges: Array = _charges[0 if montee else 1] if _charges.size() == 2 else []
+	# sommets voisins (deux de chaque côté : un sommet glissé peut passer de l'autre côté de d), à leur place dessinée
+	var pts: Array = []
+	for k in range(maxi(j - 2, 0), mini(j + 2, n - 1) + 1):
+		var dk: float = t[k]
+		var c: float = dk
+		var yk: float = y_cable(dk, montee)
+		if k > 0 and k < n - 1 and not charges.is_empty():
+			var h: float = 0.5 * minf(dk - t[k - 1], t[k + 1] - dk)
+			var ip: int = _portee_de(dk)
+			if h > 0.0 and ip >= 0 and dk > _appuis[0] and dk < _appuis[_n_appuis - 1]:
+				var meilleur: float = h
+				for q in charges:
+					var a: float = (q as Vector2).x
+					if a <= _appuis[ip] or a >= _appuis[ip + 1]:
+						continue
+					if absf(a - dk) < meilleur:
+						meilleur = absf(a - dk)
+						c = a
+				if c != dk:
+					var pente: float = (y_cable(t[k + 1], montee) - y_cable(t[k - 1], montee)) / (t[k + 1] - t[k - 1])
+					yk += pente * (c - dk)
+		pts.append(Vector2(c, yk - _fleche(c, montee)))
+	pts.sort_custom(func(u: Vector2, v: Vector2) -> bool: return u.x < v.x)
+	for i in range(pts.size() - 1):
+		var u0: Vector2 = pts[i]
+		var u1: Vector2 = pts[i + 1]
+		if d >= u0.x and d <= u1.x:
+			return lerpf(u0.y, u1.y, (d - u0.x) / maxf(u1.x - u0.x, 1e-4))
+	return y_cable(d, montee) - _fleche(d, montee)
 
 
 ## Flèche (vers le bas) de l'écart de charge réparti seul en d : celle des portées hors de la zone locale (bancs).
@@ -8069,7 +8175,9 @@ var _roues_tour: int = 0
 
 
 func _roues_proches(delta: float) -> void:
-	if not vue_active or _pyl.is_empty() or tricable() or PerfManager.allege:
+	# (pas de « not vue_active » : à bord, c'est justement là qu'on regarde les poulies défiler — retour d'utilisateur
+	# du 28/11/2026 : « tes nouvelles poulies de TKD ne tournent pas », sur la PWA, perche en main ; point_vue reste tenu)
+	if _pyl.is_empty() or tricable() or PerfManager.allege:
 		return
 	_roues_tour = (_roues_tour + 1) % 8
 	if _roues_tour == 0:

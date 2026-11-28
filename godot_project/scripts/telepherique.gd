@@ -941,9 +941,18 @@ func _maj_portillons_tph(i: int, porte: float = 0.0) -> void:
 
 ## Fornet : câble tracteur inférieur (lest, 29 mm, fiche RM.net), du bout aval du chariot de chaque cabine à la
 ## poulie de tension de la gare aval ; peu tendu, il pend sous la ligne. Un tube léger par voie, refait quand
-## la cabine a avancé de plus de 4 m (2 à 3 fois par seconde à pleine vitesse).
+## la cabine a avancé de PAS_LEST.
+## Forme (retour d'utilisateur du 28/11/2026 : « le câble tracteur en aval des cabines du TPH du Fornet prend des
+## formes bizarres ») : une CHAÎNETTE à tension horizontale constante H_LEST (celle du contrepoids de tension de la
+## gare aval), entre ses appuis. Avant, une corde à 2 % de flèche quelle que soit la portée : trop creusée quand la
+## cabine arrive en gare (2 m sur 100 m au lieu de 0,4 m), pas assez à mi-ligne, et retracée d'un bloc tous les 4 m.
+## Calcul (SageMath) : 29 mm → 3,28 kg/m, w = 32,2 N/m ; H = 100 kN (contrepoids ~10 t, environ 1/12 de la tension
+## d'une voie de porteurs) : flèche 0,4 m sur 100 m, 10,1 m sur 500 m, 37,1 m sur 960 m (wL²/8H).
 var _lest: Array = []                # [MeshInstance3D, montée ?, d au dernier tracé]
 const R_LEST: float = 0.0145
+const W_LEST: float = 0.0039 * 29.0 * 29.0 * 9.81     # N/m
+const H_LEST: float = 100000.0                        # N
+const PAS_LEST: float = 0.5
 
 
 func _poser_lest() -> void:
@@ -968,7 +977,7 @@ func _maj_lest() -> void:
 			continue
 		var montee: bool = e[1]
 		var d: float = _vehicules[0 if montee else 1][1]
-		if absf(d - float(e[2])) < 4.0:
+		if absf(d - float(e[2])) < PAS_LEST:
 			continue
 		e[2] = d
 		var m: ArrayMesh = mi.mesh
@@ -998,8 +1007,8 @@ func _maj_lest() -> void:
 			for k in range(0 if j == 0 else 1, n + 1):
 				var u: float = float(k) / n
 				var dd: float = lerpf(a0.x, a1.x, u)
-				# flèche : 2 % de la portée au milieu, sans descendre à moins de 1,5 m du sol
-				var y: float = lerpf(a0.y, a1.y, u) - 0.02 * span * 4.0 * u * (1.0 - u)
+				# chaînette de paramètre H/w (garde de 1,5 m au sol au plus bas, par sécurité)
+				var y: float = LigneRemontee.chainette(dd, a0.x, a0.y, a1.x, a1.y, H_LEST / W_LEST)
 				y = maxf(y, _sol(x, -dd) + 1.5)
 				pts.append(Vector3(x, y, -dd))
 		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _tube_lest(pts))

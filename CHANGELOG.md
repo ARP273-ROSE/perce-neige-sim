@@ -5,6 +5,53 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Prochaine version
+
+Retours d'essai sur la PWA (28/11/2026) :
+
+- **Poulies des TKD qui ne tournaient pas** (« tes nouvelles poulies de TKD ne tournent pas ») : les roues des
+  pylônes ne tournaient que vues de loin — à bord (perche en main), la ligne se croyait « vue de l'intérieur » et
+  sautait leur rotation. Elles tournent maintenant aussi à bord (sonde : 4 poulies sur 4 du pylône le plus proche).
+- **Perche : douille, ressort, fût, piston** (« le bout ne dépasse pas par le ressort en haut ») : l'élément
+  coulissant de 3,20 m remontait au repos au-dessus de l'articulation, à travers le ressort. Ressort freiné, fût gris
+  de 1,90 m, tube puis piston emboîtés, chacun plus court que son logement : rentré, rien ne dépasse. 3,02 m au
+  repos, 5,75 m tirée (5,97 m ressort étiré), d'après la vue éclatée Poma de remontees-mecaniques.net.
+- **Câble des TKD recalé** : sur la trace damée, la ligne prenait le relief à 25 m, jusqu'à 5 m au-dessus de la
+  neige affichée ; ces bosses fantômes relevaient des pylônes à 6,5 m et le câble passait à 8-9 m des hanches
+  (Chardonnet, Combe Folle). Elle prend désormais le sol affiché ; la trace de la Combe Folle part du nez de la gare.
+  Câble à 5 m au plus des hanches sur les 7 TKD, 6,1 m à deux sorties de gare.
+- **Skis sur la carre, chaussures dans les fixations, jambes articulées** (« ton ski reste à plat dans les virages
+  et la fixation a l'air articulée », puis « quand on carve, le buste reste droit, l'angle se fait au niveau du
+  bassin ; il faut que la carre du ski extérieur touche aussi, donc que la jambe extérieure se fléchisse moins ») :
+  l'inclinaison du virage (vitesse × rotation : nulle au changement de carres, la plus forte au milieu) incline les
+  jambes et le bassin ; le buste n'en garde qu'un quart, l'angle se casse aux hanches. Chaque ski est posé sur la
+  neige, sur sa carre, chaussure prise dans la fixation ; cuisse et tibia de chaque jambe vont de la hanche au haut
+  de la chaussure (cinématique inverse à deux segments, genou vers l'avant et rentré dans le virage) : le bassin
+  incliné met la hanche intérieure plus bas, la jambe intérieure plie davantage, l'extérieure reste plus tendue, et
+  les deux carres touchent. Les bâtons suivent les mains.
+- **3S : oscillation câble/cabine** (vidéo PWA, Olympique à 27 km/h : les câbles montaient et descendaient de
+  ~2,5 px toutes les 0,55 s autour de la cabine suivie) : depuis le 24/11, le nuanceur fait glisser le sommet du
+  porteur le plus proche jusque sous chaque cabine, mais le chariot restait posé sur le segment entre sommets fixes,
+  une dent de scie tous les 4 m. Le chariot suit désormais le porteur tel qu'il est dessiné, sommets glissés compris
+  (même règle que la pince des monocâbles le 27/11). Mesure image par image, caméra accrochée à la cabine comme dans
+  la vidéo : écart haute fréquence des câbles de 3,7 à 1,0 px, plus de pic à 1,5-2 Hz.
+- **Fornet : câble tracteur inférieur (lest) en chaînette** (« le câble tracteur en aval des cabines prend des formes
+  bizarres ») : c'était une corde à 2 % de flèche quelle que soit la portée, retracée d'un bloc tous les 4 m. C'est
+  désormais une chaînette à tension horizontale constante, celle du contrepoids de la gare aval : 29 mm, 3,28 kg/m,
+  H = 100 kN (~10 t, à peu près 1/12 de la tension d'une voie de porteurs ; la fiche ne donne pas la tension) —
+  flèche 0,4 m sur 100 m, 10 m sur 500 m, 37 m sur 960 m (calcul SageMath), retracée tous les 0,5 m. Garde au sol
+  vérifiée sur toute la course : plus de 10 m.
+- **3S : câbles dans les sabots de nez** (« le câble du 3S a tendance à rentrer à l'intérieur des supports qui sont
+  en sortie des gares ») : deux causes. La première portée partait du nez de la gare : le porteur prenait sa flèche
+  le long des 13 m où il repose sur le sabot et s'y enfonçait. Elle part maintenant du bout du sabot (porteur
+  dessiné = axe du sabot à 0,000 m près). Et le caisson plein, centré sur la voie, englobait le tracteur (0,42 m sous
+  les porteurs) : deux joues, une sous chaque porteur, gorge garnie au ras du câble, le tracteur file dans la fente
+  sur ses galets — comme aux gares du Fornet.
+- **Quais des télécabines** (« aux gares des TCD, il y a des quais à l'extérieur du virage des cabines ») : d'après
+  les photos du TCD10 du Vallon (« la zone d'embarquement se situe tout le long du contour »), quai en béton au
+  niveau du plancher, à l'extérieur du chemin des cabines (côté portes), de la fin du freinage au lanceur, demi-tour
+  compris, nez jaune côté cabines.
+
 ## 1.81.0 — 27 novembre 2026
 
 Retours d'essai sur la PWA (27/11/2026) :

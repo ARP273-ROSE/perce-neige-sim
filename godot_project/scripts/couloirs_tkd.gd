@@ -30,6 +30,7 @@ var relief: Node = null
 ## "rect": Rect2}
 var couloirs: Array = []
 var _cases: Dictionary = {}                 # Vector2i → [[couloir, segment], …]
+var _cases_axe: Dictionary = {}             # idem, TOUS les segments de l'axe (relevés ou non) : sur_trace()
 var n_sommets: int = 0
 var n_pieces: int = 0                       # maillages (un par TKD relevé)
 var n_troncons: int = 0
@@ -72,7 +73,10 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 	# appuis du câble de référence : bouts de gare et pylônes RÉELS (à leur place, comme RemonteesDomaine._poser)
 	var Ld: float = float(D["profil"][D["profil"].size() - 1][0])
 	var appuis: Array = []
-	for dd in [12.0, L - 12.0]:
+	# (au nez de la gare aval, comme la ligne, et non 12 m plus loin : le câble part du nez et monte droit au premier
+	# pylône ; au pied de la Combe Folle — replat puis pente à ~45 % —, la référence passait 1 à 1,5 m sous lui et le
+	# câble restait à 6-7 m de la neige, 28/11/2026)
+	for dd in [0.0, L - 12.0]:
 		var q0: Vector2 = pt.call(dd)
 		appuis.append([dd, _base(q0.x, q0.y) + TETE])
 	for p in D["pylones"]:
@@ -164,6 +168,13 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 		"L": L, "coude": coude, "troncons": []})
 	resume.append([cle, l_rel, rel])
 	for s in range(pts.size() - 1):
+		var sa: Rect2 = Rect2(pts[s], Vector2.ZERO).expand(pts[s + 1]).grow(DEMI_TRACE + 1.0)
+		for ax in range(floori(sa.position.x / CASE), floori(sa.end.x / CASE) + 1):
+			for az in range(floori(sa.position.y / CASE), floori(sa.end.y / CASE) + 1):
+				var ca: Vector2i = Vector2i(ax, az)
+				if not _cases_axe.has(ca):
+					_cases_axe[ca] = []
+				(_cases_axe[ca] as Array).append([ic, s])
 		if is_nan(t[s]) and is_nan(t[s + 1]):
 			continue
 		var sb: Rect2 = Rect2(pts[s], Vector2.ZERO).expand(pts[s + 1]).grow(DEMI_TRACE + TALUS + 1.0)
@@ -214,6 +225,23 @@ func hauteur(x: float, z: float, base: float) -> float:
 			best_lat = lat
 			best = h
 	return best
+
+
+## (x, z) est-il sur la trace d'un TKD (à DEMI_TRACE + 1 m de son axe), relevée ou non ? (la ligne y prend le sol
+## affiché fin : RemonteesDomaine.sol_garde → ReliefBuilder.hauteur_ligne)
+func sur_trace(x: float, z: float) -> bool:
+	var lst: Variant = _cases_axe.get(Vector2i(floori(x / CASE), floori(z / CASE)))
+	if lst == null:
+		return false
+	var q: Vector2 = Vector2(x, z)
+	for e in lst:
+		var pts: PackedVector2Array = couloirs[int(e[0])]["pts"]
+		var p0: Vector2 = pts[int(e[1])]
+		var ab: Vector2 = pts[int(e[1]) + 1] - p0
+		var u: float = clampf((q - p0).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
+		if q.distance_to(p0 + ab * u) <= DEMI_TRACE + 1.0:
+			return true
+	return false
 
 
 ## Hauteurs d'une grille (collisions du décor) prises au couloir là où il passe.

@@ -2822,6 +2822,11 @@ func hauteur_ligne(x: float, z: float) -> float:
 	for k in _pieces_case(x, z):
 		if (_pieces[k][0] as Rect2).has_point(Vector2(x, z)):
 			return hauteur_sol(x, z)
+	# (trace d'un TKD : le sol affiché, fin — là où la trace colle au relief (rien de relevé), le relief à 25 m passait
+	# jusqu'à 5 m au-dessus de la neige, des bosses fantômes sous le câble : pylônes relevés à 6,5 m et câble à 8-9 m
+	# des hanches au Chardonnet et à la Combe Folle, la perche ne tenait plus le skieur, 28/11/2026)
+	if couloirs != null and couloirs.sur_trace(x, z):
+		return hauteur_sol(x, z)
 	var h25: float = _tri_sur(_h25, x, z, 1)
 	if couloirs != null:
 		var hc2: float = couloirs.hauteur(x, z, h25)

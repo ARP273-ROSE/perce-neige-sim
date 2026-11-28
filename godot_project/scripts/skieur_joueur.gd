@@ -196,6 +196,14 @@ var _poussee_t: float = 0.0
 var _pousse: bool = false                # il pousse vraiment (relevé au pas précédent)
 var _image_poussee: int = -1
 var _skis_pieds_v: Mesh = null           # chasse-neige : skis en V
+## Chaussé, debout : un ski par pied (chaussure prise dans la fixation), cuisses et bas de jambe posés chaque image
+## (_poser_jambes) ; 2 instances chacun (gauche, droite).
+var _skis_ch: MultiMeshInstance3D = null
+var _cuisses: MultiMeshInstance3D = null
+var _tibias: MultiMeshInstance3D = null
+var _poses: Dictionary = {}              # maillage du corps chaussé → bassin, hanches, longueurs, écart, chasse-neige
+var _mains_b: Array = [Vector3.ZERO, Vector3.ZERO]      # bâtons : main et pointe (repère du corps)
+var _pointes_b: Array = [Vector3.ZERO, Vector3.ZERO]
 var _posture: int = 0                    # 0 glisse, 1 schuss, 2 chasse-neige
 ## Chute (retour d'utilisateur, 07/10/2026 : « si je vais dans les décors trop vite on peut
 ## déchausser et s'exploser dans la neige, plus qu'à avoir une touche
@@ -321,15 +329,34 @@ static func _calculer_apparence(d: Dictionary) -> void:
 	d["images"] = images
 	d["skis_main"] = SkieurMesh.skis(mat)
 	# chaussé : posture de glisse, skis aux pieds, deux bâtons
-	d["glisse"] = SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat)
-	d["schuss"] = SkieurMesh.passager_squelette(SkieurMesh.squelette_schuss(), "libre", "casque", mat)
-	d["chasse"] = SkieurMesh.passager_squelette(SkieurMesh.squelette_chasse(), "libre", "casque", mat)
-	var poussee: Array = []
+	# chaussé : corps sans jambes ni chaussures (elles sont avec les skis) ; bassin, hanches et longueurs notés
+	var genoux: Array = []
+	var chausses: Array = []
+	var sq: Array = [SkieurMesh.squelette_glisse(), SkieurMesh.squelette_schuss(), SkieurMesh.squelette_chasse()]
 	for k in range(4):
-		poussee.append(SkieurMesh.passager_squelette(SkieurMesh.squelette_poussee(k), "libre", "casque", mat))
-	d["poussee"] = poussee
+		sq.append(SkieurMesh.squelette_poussee(k))
+	for s0 in sq:
+		var s1: Dictionary = s0
+		s1["sans_tibias"] = true
+		chausses.append(SkieurMesh.passager_squelette(s1, "libre", "casque", mat))
+		var po: Dictionary = {"bassin": s1["bassin"], "hanche": [s1["hanche_g"], s1["hanche_d"]], "l1": [], "l2": [],
+			"ecart": absf((s1["cheville_d"] as Vector3).x), "chasse": float(s1.get("chasse", 0.0)),
+			"genou": [s1["genou_g"], s1["genou_d"]]}
+		for c in ["g", "d"]:
+			var ge: Vector3 = s1["genou_" + c]
+			po["l1"].append((s1["hanche_" + c] as Vector3).distance_to(ge))
+			po["l2"].append(ge.distance_to((s1["cheville_" + c] as Vector3) + Vector3(0.0, 0.13, -0.01)))
+		genoux.append(po)
+	d["glisse"] = chausses[0]
+	d["schuss"] = chausses[1]
+	d["chasse"] = chausses[2]
+	d["poussee"] = chausses.slice(3)
+	d["genoux"] = genoux
 	d["skis_pieds"] = SkieurMesh.skis_aux_pieds(mat)
 	d["skis_pieds_v"] = SkieurMesh.skis_aux_pieds(mat, SkieurMesh.CHASSE_ANGLE)
+	d["ski_chausse"] = SkieurMesh.skis_aux_pieds(mat, 0.0, true, true)
+	d["tibia"] = SkieurMesh.tibia(mat)
+	d["cuisse"] = SkieurMesh.cuisse(mat)
 	d["baton"] = SkieurMesh.baton(mat)
 
 
@@ -361,6 +388,20 @@ func _construire_apparence() -> void:
 	_images_poussee.append_array(d["poussee"])
 	_skis_pieds = d["skis_pieds"]
 	_skis_pieds_v = d["skis_pieds_v"]
+	var imgs: Array = [_image_glisse, _image_schuss, _image_chasse] + _images_poussee
+	for i in range(imgs.size()):
+		_poses[imgs[i]] = d["genoux"][i]
+	_skis_ch = _mm(d["ski_chausse"], Color(0.55, 0.30, 0.80, 1.0))
+	_cuisses = _mm(d["cuisse"], graine)
+	_tibias = _mm(d["tibia"], graine)
+	for mm in [_skis_ch, _cuisses, _tibias]:
+		var mi: MultiMeshInstance3D = mm
+		var c0: Color = mi.multimesh.get_instance_custom_data(0)
+		mi.multimesh.instance_count = 2
+		for k2 in range(2):
+			mi.multimesh.set_instance_custom_data(k2, c0)
+		mi.material_override = _mat_coupe
+		mi.visible = false
 	_batons = _mm(d["baton"], Color(0.55, 0.30, 0.80, 1.0))
 	_batons.multimesh.instance_count = 2
 	_poser_batons(0)
@@ -489,6 +530,7 @@ func asseoir(cap: float, skis_aux_pieds: bool = false) -> void:
 	cam_pitch = 0.10               # regard vers l'amont (la pente remplissait l'écran)
 	velocity = Vector3.ZERO
 	_corps.multimesh.mesh = _image_assise
+	_corps.transform = Transform3D.IDENTITY
 	# au télésiège, chaussé : skis aux pieds, sous les pieds pendants (ils
 	# disparaissaient — retour d'utilisateur, 23/10/2026) ; sinon posés
 	_skis.visible = chausse
@@ -498,6 +540,7 @@ func asseoir(cap: float, skis_aux_pieds: bool = false) -> void:
 	_visuel.rotation = Vector3(0.0, cap, 0.0)
 	_skis.basis = Basis.IDENTITY
 	_visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * RECUL_ASSIS
+	_poser_jambes()
 
 
 func lever() -> void:
@@ -509,8 +552,8 @@ func lever() -> void:
 	_visuel.rotation = Vector3.ZERO
 	_skis.basis = Basis.IDENTITY
 	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
-	if chausse:
-		_apparence_ski()
+	_skis.multimesh.mesh = _skis_main
+	_apparence_ski()
 
 
 ## Vitesse de glisse (m/s), 0 à pied.
@@ -523,12 +566,14 @@ func _apparence_ski() -> void:
 	_image_poussee = -1
 	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
 	_poser_batons(0)
-	_corps.position.y = 0.045 if chausse else 0.0
-	_skis.multimesh.mesh = _skis_pieds if chausse else _skis_main
-	_skis.position = Vector3.ZERO if chausse else SkieurMesh.ANCRE_SKIS
+	_corps.transform = Transform3D(Basis.IDENTITY, Vector3(0.0, SkieurMesh.Y_CHAUSSURE if chausse else 0.0, 0.0))
+	_skis.multimesh.mesh = _skis_main
+	_skis.position = SkieurMesh.ANCRE_SKIS
+	_skis.visible = not chausse
 	_batons.visible = chausse
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
 	_skis.basis = Basis.IDENTITY
+	_poser_jambes()
 	_visuel.position.y = Y_SKI if chausse else 0.0
 
 
@@ -570,8 +615,8 @@ func _poser_posture(p: int) -> void:
 	_posture = p
 	_image_poussee = -1
 	_corps.multimesh.mesh = [_image_glisse, _image_schuss, _image_chasse][p]
-	_skis.multimesh.mesh = _skis_pieds_v if p == 2 else _skis_pieds
 	_poser_batons(p)
+	_poser_jambes()
 
 
 ## Image k du cycle de poussée : corps et bâtons (posture 3).
@@ -581,15 +626,23 @@ func _poser_poussee(k: int) -> void:
 	_posture = 3
 	_image_poussee = k
 	_corps.multimesh.mesh = _images_poussee[k]
-	_skis.multimesh.mesh = _skis_pieds
 	for b in range(2):
 		var sx: float = -1.0 if b == 0 else 1.0
 		var m: Vector3 = SkieurMesh.POUSSEE_MAINS[k]
 		var t: Vector3 = SkieurMesh.POUSSEE_POINTES[k]
 		_poser_un_baton(b, Vector3(sx * m.x, m.y, m.z), Vector3(sx * t.x, t.y, t.z))
+	_poser_jambes()
 
 
+## Bâton k de la main à la pointe (repère du corps) : chaussé debout, la main suit le haut du corps (_corps : buste
+## et bassin inclinés au virage) et une pointe basse reste sur la neige.
 func _poser_un_baton(k: int, main_p: Vector3, pointe: Vector3) -> void:
+	_mains_b[k] = main_p
+	_pointes_b[k] = pointe
+	_baton_vers(k, main_p, pointe)
+
+
+func _baton_vers(k: int, main_p: Vector3, pointe: Vector3) -> void:
 	var ax: Vector3 = main_p - pointe
 	var y: Vector3 = ax.normalized()
 	var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
@@ -613,12 +666,7 @@ func _poser_batons(p: int) -> void:
 		elif p == 2:
 			main_p = Vector3(sx * 0.32, 0.84, -0.15)
 			pointe = Vector3(sx * 0.52, 0.0, 0.30)
-		var ax: Vector3 = main_p - pointe
-		var y: Vector3 = ax.normalized()
-		var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
-		var z: Vector3 = x.cross(y)
-		_batons.multimesh.set_instance_transform(k, Transform3D(
-			Basis(x, y * (ax.length() / SkieurMesh.LONG_BATON), z), pointe))
+		_poser_un_baton(k, main_p, pointe)
 
 
 ## Tombé : skis déchaussés, à terre sur le dos CHUTE_S secondes.
@@ -1592,24 +1640,113 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 
 ## Skis posés sur la pente (retours d'utilisateur du 26 et du 27/11/2026 : « les skis ne suivent pas la pente mais
 ## restent horizontaux ; les chevilles devraient faire un truc ? ») : les skis prennent la normale du sol, lissée ;
-## le corps n'en prend qu'une part (il reste à peu près d'aplomb, comme un vrai skieur) et les chevilles fléchissent
-## pour le reste — les skis tournent sous les chaussures, autour de leur centre. `n` : normale du sol (monde).
+## le corps n'en prend qu'une part (il reste à peu près d'aplomb, comme un vrai skieur). `n` : normale du sol (monde).
 const PART_CORPS_PENTE: float = 0.3
-const CHEVILLE_MAX: float = deg_to_rad(35.0)
 
 func poser_skis(n: Vector3, delta: float) -> void:
 	_n_vis = _n_vis.lerp(n, minf(1.0, delta * 8.0)).normalized()
+	var nb: Vector3 = Vector3.UP.slerp(_normale_bornee(), PART_CORPS_PENTE).normalized()
+	_visuel.basis = Basis(Quaternion(Vector3.UP, nb)) * Basis(Vector3.UP, _cap_ski)
+	_poser_jambes()
+
+
+func _normale_bornee() -> Vector3:
 	var nv: Vector3 = _n_vis
 	if nv.y < cos(deg_to_rad(50.0)):
 		nv = Vector3(nv.x, 0.0, nv.z).normalized() * sin(deg_to_rad(50.0)) + Vector3.UP * cos(deg_to_rad(50.0))
-	var nb: Vector3 = Vector3.UP.slerp(nv, PART_CORPS_PENTE).normalized()
-	_visuel.basis = Basis(Quaternion(Vector3.UP, nb)) * Basis.from_euler(Vector3(0.0, _cap_ski, _penche))
-	# (dans le repère du corps : la normale du sol, bornée à ce que la cheville et le genou permettent)
-	var nl: Vector3 = (_visuel.basis.inverse() * nv).normalized()
-	var a: float = Vector3.UP.angle_to(nl)
-	if a > CHEVILLE_MAX:
-		nl = Vector3.UP.slerp(nl, CHEVILLE_MAX / a).normalized()
-	_skis.basis = Basis(Quaternion(Vector3.UP, nl)) if a > 1e-4 else Basis.IDENTITY
+	return nv
+
+
+## Attitude en virage (retours d'utilisateur du 28/11/2026 : « ton ski reste à plat dans les virages et la fixation a
+## l'air articulée, ce qui n'est pas le cas », puis « quand on carve, le buste reste droit, l'angle se fait au niveau
+## du bassin, et là y a que ton ski intérieur qui touche la neige ; il faut que la carre du ski extérieur touche
+## aussi, donc que la jambe extérieure se fléchisse moins pour que les deux skis touchent la neige tout le temps, et
+## t'adaptes en fonction de la phase du virage et de l'angle d'inclinaison ») :
+##   - l'inclinaison φ (_penche, suivie de la vitesse × rotation du virage, donc de sa phase : nulle au changement
+##     de carres, au plus fort au milieu) incline les JAMBES et le BASSIN, de la neige au bassin ;
+##   - le BUSTE n'en garde que PART_BUSTE : l'angle se casse aux hanches (angulation) ;
+##   - chaque ski est posé sur la neige, sur sa carre (roulis ANGULATION × φ par rapport à la verticale), à son écart
+##     d'un pied à l'autre LE LONG DE LA NEIGE : les deux skis touchent, chacun sur sa carre ;
+##   - le bassin incliné met la hanche intérieure plus bas : la jambe intérieure plie davantage, l'extérieure reste
+##     plus tendue — cinématique inverse à deux segments (cuisse, tibia) de la hanche au haut de la chaussure,
+##     genou vers l'avant et un peu rentré dans le virage. Les chaussures font corps avec les skis.
+const ANGULATION: float = 1.15
+const CARRE_MAX: float = deg_to_rad(62.0)
+const PART_BUSTE: float = 0.25
+const DEMI_LARGEUR_SKI: float = 0.045
+
+
+func _poser_jambes() -> void:
+	if _skis_ch == null:
+		return
+	var po: Variant = _poses.get(_corps.multimesh.mesh)
+	var debout: bool = po != null and chausse and not assis and _chute_t <= 0.0
+	_skis_ch.visible = debout
+	_cuisses.visible = debout
+	_tibias.visible = debout
+	if not debout:
+		return
+	var pose: Dictionary = po
+	var bi: Basis = _visuel.basis.inverse()
+	var nl: Vector3 = (bi * _normale_bornee()).normalized()          # normale de la neige (repère du corps)
+	var vl: Vector3 = (bi * Vector3.UP).normalized()                 # verticale
+	var f: Vector3 = (Vector3.FORWARD - nl * nl.dot(Vector3.FORWARD)).normalized()
+	var lat: Vector3 = f.cross(nl).normalized()                      # à droite, le long de la neige
+	var phi: float = _penche
+	# skis : sur la carre, roulés par rapport à la verticale ; posés sur leur carre (relevés de la demi-largeur)
+	var carre: float = clampf(phi * ANGULATION, -CARRE_MAX, CARRE_MAX)
+	var u0: Vector3 = (vl - f * f.dot(vl)).normalized()
+	var u: Vector3 = u0.rotated(f, -carre)
+	var bski: Basis = Basis(u.cross(-f), u, -f)
+	var leve: float = DEMI_LARGEUR_SKI * sin(u.angle_to(nl))
+	# bassin et buste
+	var bassin: Vector3 = pose["bassin"]
+	var up_l: Vector3 = vl.rotated(f, -phi)
+	var bp: Basis = Basis(f, -phi)
+	var bt: Basis = Basis(f, -phi * PART_BUSTE)
+	var lh: float = (bassin.y + SkieurMesh.Y_CHAUSSURE) * (1.0 - 0.10 * minf(absf(phi), 1.0))
+	var P: Vector3 = up_l * lh - f * bassin.z
+	_corps.transform = Transform3D(bt, P - bt * bassin)
+	var ecart: float = float(pose["ecart"])
+	var chasse: float = float(pose["chasse"])
+	for i in range(2):
+		var sx: float = -1.0 if i == 0 else 1.0
+		var bs: Basis = bski * Basis(Vector3.UP, sx * chasse)
+		var F: Vector3 = lat * (sx * ecart) + nl * leve
+		_skis_ch.multimesh.set_instance_transform(i, Transform3D(bs, F))
+		var A: Vector3 = F + bs * Vector3(0.0, SkieurMesh.TIBIA_BAS.y, SkieurMesh.TIBIA_BAS.z)
+		var H: Vector3 = P + bp * ((pose["hanche"][i] as Vector3) - bassin)
+		var l1: float = float(pose["l1"][i])
+		var l2: float = float(pose["l2"][i])
+		var ha: Vector3 = A - H
+		var d: float = clampf(ha.length(), absf(l1 - l2) + 0.01, l1 + l2 - 0.002)
+		var ua: Vector3 = ha.normalized()
+		var ca: float = clampf((l1 * l1 + d * d - l2 * l2) / (2.0 * l1 * d), -1.0, 1.0)
+		# genou : vers l'avant, un peu rentré dans le virage (et vers l'intérieur au chasse-neige)
+		var pole: Vector3 = f - lat * (0.35 * clampf(phi, -1.0, 1.0)) - lat * (sx * (0.25 if chasse > 0.0 else 0.0))
+		var pp: Vector3 = (pole - ua * pole.dot(ua)).normalized()
+		var K: Vector3 = H + ua * (l1 * ca) + pp * (l1 * sqrt(maxf(1.0 - ca * ca, 0.0)))
+		_segment(_cuisses, i, K, H)
+		_segment(_tibias, i, A, K)
+	# bâtons : la main suit le corps ; une pointe basse reste sur la neige
+	for k in range(2):
+		var m: Vector3 = _corps.transform * (_mains_b[k] as Vector3)
+		var pt: Vector3 = _pointes_b[k]
+		var q: Vector3 = _corps.transform * pt
+		if pt.y < 0.05:
+			q -= nl * nl.dot(q)
+		_baton_vers(k, m, q)
+
+
+## Instance i d'un tube de longueur 1 (le long de +y) tirée de a à b.
+func _segment(mm: MultiMeshInstance3D, i: int, a: Vector3, b: Vector3) -> void:
+	var ax: Vector3 = b - a
+	var l: float = ax.length()
+	if l < 0.01:
+		return
+	var y: Vector3 = ax / l
+	var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
+	mm.multimesh.set_instance_transform(i, Transform3D(Basis(x, y * l, x.cross(y)), a))
 
 
 ## Pose du skieur debout sur ses skis au sol en (sa position), cap `cap` : tiré par un téléski, en attente de perche.

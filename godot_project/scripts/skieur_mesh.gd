@@ -429,11 +429,18 @@ static func passager_squelette(s: Dictionary, pose: String, coiffe: String, mat:
 	var k: float = s.k
 	var assis: bool = pose == "assis"
 	# -- jambes : chaussures de ski, pantalon bouffant par-dessus
+	# (« sans_tibias » : skieur jouable chaussé — chaussures avec les skis, rigides comme une fixation, cuisses et bas
+	# de jambe à part, posés chaque image de la hanche au genou et du genou au haut de la chaussure :
+	# SkieurJoueur._poser_jambes ; retours d'utilisateur du 28/11/2026 : « ton ski reste à plat dans les virages et la
+	# fixation a l'air articulée », puis « quand on carve, le buste reste droit, l'angle se fait au niveau du bassin »)
+	var sans_tibias: bool = bool(s.get("sans_tibias", false))
 	for c in ["g", "d"]:
 		var sx: float = -1.0 if c == "g" else 1.0
 		var ch: Vector3 = s["cheville_" + c]
 		var ge: Vector3 = s["genou_" + c]
 		var ha: Vector3 = s["hanche_" + c]
+		if sans_tibias:
+			continue            # (cuisses et bas de jambe : SkieurJoueur._poser_jambes, chaque image)
 		_chaussure(b, ch, sx, k, sx * float(s.get("chasse", 0.0)))
 		var bas: Vector3 = ch + Vector3(0.0, 0.13 * k, -0.01 * k)
 		var mi_tibia: Vector3 = bas.lerp(ge, 0.5)
@@ -697,7 +704,7 @@ const CHASSE_ANGLE: float = 0.31          # rad (≈ 18°)
 const CHASSE_X: float = 0.30              # m, demi-écart des pieds
 ## `chasse` : angle (rad) du chasse-neige — chaque ski pivote autour de sa
 ## spatule, les talons s'écartent, les pieds sont plus larges.
-static func skis_aux_pieds(mat: Material, chasse: float = 0.0) -> ArrayMesh:
+static func skis_aux_pieds(mat: Material, chasse: float = 0.0, chaussures: bool = false, un_seul: bool = false) -> ArrayMesh:
 	var b: Bati = Bati.new()
 	var prof: Array = [[0.0, 0.030], [0.025, 0.050], [0.08, 0.056], [0.30, 0.053], [0.60, 0.046],
 		[0.85, 0.0425], [1.10, 0.047], [1.35, 0.057], [1.48, 0.062], [1.57, 0.058], [1.64, 0.047],
@@ -705,8 +712,8 @@ static func skis_aux_pieds(mat: Material, chasse: float = 0.0) -> ArrayMesh:
 	var ep: float = 0.016
 	var zc: float = -0.05                 # milieu de la chaussure (repère du skieur)
 	b.lod = 2
-	for sx in [-1.0, 1.0]:
-		var xc: float = sx * (0.10 if chasse == 0.0 else CHASSE_X)
+	for sx in ([1.0] if un_seul else [-1.0, 1.0]):
+		var xc: float = 0.0 if un_seul else sx * (0.10 if chasse == 0.0 else CHASSE_X)
 		var piv: Vector3 = Vector3(xc, 0.0, zc)        # la chaussure
 		var rot: Basis = Basis(Vector3.UP, sx * chasse)
 		var tourne: Callable = func(p: Vector3) -> Vector3:
@@ -743,7 +750,37 @@ static func skis_aux_pieds(mat: Material, chasse: float = 0.0) -> ArrayMesh:
 			rot, P_FIXATION)
 		_boite(b, tourne.call(Vector3(xc, ep + 0.028, zc - (0.64 - CENTRE_CHAUSSURE))), Vector3(0.034, 0.028, 0.032),
 			rot, P_FIXATION)
+		if chaussures:
+			# la chaussure prise dans la fixation (même place que celle du corps, posé Y_CHAUSSURE plus haut)
+			var n0: int = b.v.size()
+			_chaussure(b, Vector3(xc, 0.11, 0.03), sx, 1.0, sx * chasse)
+			for iv in range(n0, b.v.size()):
+				b.v[iv] = b.v[iv] + Vector3(0.0, Y_CHAUSSURE, 0.0)
+			b.lod = 2
 	b.lod = 0
+	return b.commit(mat)
+
+
+## Semelle des chaussures au-dessus de la semelle des skis (corps chaussé posé d'autant plus haut :
+## SkieurJoueur._apparence_ski).
+const Y_CHAUSSURE: float = 0.045
+## Bas de jambe du skieur chaussé (pantalon sur le haut de la chaussure), à SA place dans la chaussure : un tube de
+## longueur 1 le long de +y, tiré du haut de la chaussure (TIBIA_BAS, repère des skis) au genou.
+const TIBIA_BAS: Vector3 = Vector3(0.10, 0.11 + 0.13 + Y_CHAUSSURE, 0.02)
+
+
+## Cuisse : tube de longueur 1 le long de +y, du genou (0) à la hanche (1), rotule comprise.
+static func cuisse(mat: Material) -> ArrayMesh:
+	var b: Bati = Bati.new()
+	_tube(b, [Vector3(0.0, -0.03, 0.0), Vector3.ZERO, Vector3(0.0, 0.5, 0.0), Vector3(0.0, 1.0, 0.0)],
+		[0.068, 0.074, 0.086, 0.082], [0.072, 0.079, 0.088, 0.084], P_PANTALON, Vector3.RIGHT, true, true)
+	return b.commit(mat)
+
+
+static func tibia(mat: Material) -> ArrayMesh:
+	var b: Bati = Bati.new()
+	_tube(b, [Vector3.ZERO, Vector3(0.0, 0.15, 0.0), Vector3(0.0, 0.5, 0.0), Vector3(0.0, 1.0, 0.0)],
+		[0.090, 0.084, 0.074, 0.073], [0.094, 0.086, 0.078, 0.078], P_PANTALON, Vector3.RIGHT, true, false)
 	return b.commit(mat)
 
 
